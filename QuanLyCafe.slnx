@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/QuanLyCafe.Api/QuanLyCafe.Api.csproj" />
+    <Project Path="src/QuanLyCafe.Application/QuanLyCafe.Application.csproj" />
+    <Project Path="src/QuanLyCafe.Desktop/QuanLyCafe.Desktop.csproj" />
+    <Project Path="src/QuanLyCafe.Domain/QuanLyCafe.Domain.csproj" />
+    <Project Path="src/QuanLyCafe.Infrastructure/QuanLyCafe.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/QuanLyCafe.Tests/QuanLyCafe.Tests.csproj" />
+  </Folder>
+</Solution>
