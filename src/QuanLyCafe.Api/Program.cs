@@ -98,13 +98,15 @@ using (var scope = app.Services.CreateScope())
     bool seeded;
     try
     {
+        // Tự tạo/cập nhật bảng: người chạy Docker không cần cài dotnet-ef.
+        await db.Database.MigrateAsync();
         seeded = await DbSeeder.SeedManagerAsync(db,
             app.Configuration["Seed:ManagerUsername"] ?? "manager",
             app.Configuration["Seed:ManagerPassword"]);
     }
     catch (Microsoft.Data.SqlClient.SqlException)
     {
-        app.Logger.LogCritical("Không truy cập được DB: kiểm tra SQL Server và đã chạy dotnet ef database update chưa.");
+        app.Logger.LogCritical("Không truy cập được DB: kiểm tra SQL Server và ConnectionStrings:Default.");
         throw;
     }
     if (!seeded)

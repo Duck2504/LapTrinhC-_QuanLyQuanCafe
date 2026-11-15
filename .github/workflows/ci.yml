@@ -120,3 +120,38 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  compose:
+    name: Docker Compose chạy thử (API + SQL Server)
+    needs: [backend, tests, migrations]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tạo .env với mật khẩu ngẫu nhiên
+        run: |
+          {
+            echo "SA_PASSWORD=Ci_$(openssl rand -hex 12)"
+            echo "JWT_KEY=$(openssl rand -hex 32)"
+            echo "MANAGER_PASSWORD=Ci_$(openssl rand -hex 8)"
+          } > .env
+      - name: docker compose up
+        run: docker compose up -d --build
+      - name: Chờ /health
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/health && exit 0
+            sleep 3
+          done
+          exit 1
+      - name: Đăng nhập manager
+        run: |
+          set -a; . ./.env; set +a
+          curl -fsS -X POST http://localhost:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"manager\",\"password\":\"$MANAGER_PASSWORD\"}" | grep -q '"role":"Manager"'
+      - name: Log khi lỗi
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Dọn dẹp
+        if: always()
+        run: docker compose down -v
