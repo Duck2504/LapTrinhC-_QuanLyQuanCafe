@@ -1,6 +1,22 @@
 @QuanLyCafe.Api_HostAddress = http://localhost:5254
+# Dán token từ response login vào đây
+@token =
 
-GET {{QuanLyCafe.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+GET {{QuanLyCafe.Api_HostAddress}}/health
+
+###
+
+POST {{QuanLyCafe.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{ "username": "manager", "password": "<mật khẩu trong user-secrets Seed:ManagerPassword>" }
+
+###
+
+POST {{QuanLyCafe.Api_HostAddress}}/api/auth/change-password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "currentPassword": "...", "newPassword": "..." }
 
 ###
