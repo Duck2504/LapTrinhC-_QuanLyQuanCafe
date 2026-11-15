@@ -4,8 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using QuanLyCafe.Domain.Common;
 
 namespace QuanLyCafe.Api.Middleware;
-
-// Exception → ProblemDetails có "code" (ERR-*). Lỗi không lường trước → 500, không lộ chi tiết.
 public class AppExceptionHandler(IProblemDetailsService problemDetails, ILogger<AppExceptionHandler> logger)
     : IExceptionHandler
 {
@@ -36,7 +34,6 @@ public class AppExceptionHandler(IProblemDetailsService problemDetails, ILogger<
         if (ex is DbUpdateConcurrencyException) problem.Extensions["code"] = ErrorCodes.ConcurrencyConflict;
 
         http.Response.StatusCode = status;
-        // WriteAsync (không phải TryWriteAsync) để vẫn trả đúng mã khi client không gửi Accept: JSON.
         await problemDetails.WriteAsync(new() { HttpContext = http, ProblemDetails = problem, Exception = ex });
         return true;
     }
