@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/logs/
+.git/
+.github/
+.claude/
+graphify-out/
+tests/
+src/QuanLyCafe.Desktop/
