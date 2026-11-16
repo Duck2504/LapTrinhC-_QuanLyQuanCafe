@@ -20,3 +20,35 @@ Content-Type: application/json
 { "currentPassword": "...", "newPassword": "..." }
 
 ###
+
+### Ordering — đăng nhập Waiter/Cashier lấy token
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/tables
+Authorization: Bearer {{token}}
+
+###
+
+# orderType: 1 tại bàn (cần tableId), 2 mang đi
+POST {{QuanLyCafe.Api_HostAddress}}/api/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "orderType": 1, "tableId": "<id bàn từ GET /api/tables>" }
+
+###
+
+@orderId = <id từ POST /api/orders>
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/orders/{{orderId}}
+Authorization: Bearer {{token}}
+
+###
+
+# Thay toàn bộ món còn "Chờ"; gửi [] để xóa hết món chờ
+PUT {{QuanLyCafe.Api_HostAddress}}/api/orders/{{orderId}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "items": [ { "productId": "<id sản phẩm>", "quantity": 2, "note": "ít đá" } ] }
+
+###

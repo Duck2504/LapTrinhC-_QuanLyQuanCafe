@@ -6,10 +6,13 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using QuanLyCafe.Api.Auth;
 using QuanLyCafe.Api.Middleware;
+using QuanLyCafe.Application.Ordering;
 using QuanLyCafe.Application.Staff;
 using QuanLyCafe.Domain.Common;
+using QuanLyCafe.Domain.Ordering;
 using QuanLyCafe.Domain.Staff;
 using QuanLyCafe.Infrastructure.Persistence;
+using QuanLyCafe.Infrastructure.Repositories.Ordering;
 using QuanLyCafe.Infrastructure.Repositories.Staff;
 using Serilog;
 
@@ -32,6 +35,10 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<StaffService>();
 builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+
+// Ordering
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<OrderService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
 {
