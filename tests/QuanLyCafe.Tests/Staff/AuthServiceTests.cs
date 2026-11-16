@@ -84,6 +84,9 @@ public class AuthServiceTests
             Task.FromResult(user.Username == username ? user : null);
         public Task<User?> GetByIdAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(user.UserID == userId ? user : null);
+        public Task<List<User>> GetAllAsync(CancellationToken ct = default) => Task.FromResult(new List<User> { user });
+        public Task<List<Role>> GetRolesAsync(CancellationToken ct = default) => Task.FromResult(new List<Role> { user.Role });
+        public void Add(User u) => throw new NotSupportedException();
         public Task SaveChangesAsync(CancellationToken ct = default) { Saves++; return Task.CompletedTask; }
     }
 

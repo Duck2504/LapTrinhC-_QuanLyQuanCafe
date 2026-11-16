@@ -8,7 +8,7 @@ namespace QuanLyCafe.Application.Staff;
 public class AuthService(IUserRepository users, IJwtTokenGenerator tokens, ILogger<AuthService> logger)
 {
     public const int MinPasswordLength = 6;
-    private static readonly PasswordHasher<User> Hasher = new(); // PBKDF2, cùng DbSeeder
+    internal static readonly PasswordHasher<User> Hasher = new(); // PBKDF2, cùng DbSeeder
     private static readonly User DummyUser = new() { PasswordHash = Hasher.HashPassword(new User(), Guid.NewGuid().ToString()) };
 
     public async Task<LoginResponse> LoginAsync(LoginRequest req, CancellationToken ct = default)

@@ -30,6 +30,7 @@ builder.Services.AddMemoryCache();
 // Staff
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<StaffService>();
 builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
@@ -45,21 +46,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     };
     o.Events = new JwtBearerEvents
     {
-        // Mục 4.3.4: tài khoản bị vô hiệu hóa bị chặn ngay dù token còn hạn (đệm 30 giây).
+        // Mục 4.3.4: tài khoản bị vô hiệu hóa hoặc bị đổi vai trò bị chặn ngay dù token còn hạn (đệm 30 giây).
         OnTokenValidated = async ctx =>
         {
             var sp = ctx.HttpContext.RequestServices;
             var userId = Guid.Parse(ctx.Principal!.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
-            var active = await sp.GetRequiredService<IMemoryCache>().GetOrCreateAsync($"user-active:{userId}", async e =>
+            var currentRole = await sp.GetRequiredService<IMemoryCache>().GetOrCreateAsync($"user-role:{userId}", async e =>
             {
                 e.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30);
-                return (await sp.GetRequiredService<IUserRepository>().GetByIdAsync(userId))?.IsActive == true;
+                var user = await sp.GetRequiredService<IUserRepository>().GetByIdAsync(userId);
+                return user?.IsActive == true ? user.Role.RoleName : null; // null = bị khóa / không còn
             });
-            if (!active)
+            if (currentRole is null)
             {
                 ctx.HttpContext.Items["authCode"] = ErrorCodes.AuthAccountLocked;
                 ctx.Fail("Tài khoản đã bị vô hiệu hóa.");
             }
+            else if (ctx.Principal.FindFirst("role")?.Value != currentRole)
+                ctx.Fail("Vai trò đã thay đổi, cần đăng nhập lại."); // → 401 ERR-AUTH-003, Desktop về form đăng nhập
         },
         // 401 trả ProblemDetails có code để Desktop hiển thị đúng thông báo.
         OnChallenge = async ctx =>
