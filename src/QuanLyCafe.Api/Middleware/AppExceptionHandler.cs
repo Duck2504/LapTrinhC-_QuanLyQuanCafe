@@ -30,7 +30,11 @@ public class AppExceptionHandler(IProblemDetailsService problemDetails, ILogger<
             Status = status,
             Title = status == StatusCodes.Status500InternalServerError ? "Đã xảy ra lỗi hệ thống." : ex.Message,
         };
-        if (ex is AppException app) problem.Extensions["code"] = app.Code;
+        if (ex is AppException app)
+        {
+            problem.Extensions["code"] = app.Code;
+            problem.Detail = app.Message; // Desktop ApiClient đọc "detail" để hiện thông báo
+        }
         if (ex is DbUpdateConcurrencyException) problem.Extensions["code"] = ErrorCodes.ConcurrencyConflict;
 
         http.Response.StatusCode = status;
