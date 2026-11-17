@@ -74,7 +74,7 @@ public class frmProducts : Form
         Setup(btnSave,    "Lưu",      120, btnSave_Click);
         Setup(btnDelete,  "Xoá",      228, btnDelete_Click);
         Setup(btnRefresh, "Làm mới",  336, btnRefresh_Click);
-        Setup(btnBom,     "Thiết lập BOM…", 444, (_, _) => { });
+        Setup(btnBom, "Thiết lập BOM…", 444, BtnBom_Click);
         btnBom.Width = 130;
         btnBom.Enabled = false;   // để Ngày 5
 
@@ -85,6 +85,7 @@ public class frmProducts : Form
         });
     }
 
+    
     private async Task LoadProductsAsync()
     {
         try
@@ -100,6 +101,7 @@ public class frmProducts : Form
 
     private void dgvProducts_SelectionChanged(object? s, EventArgs e)
     {
+        btnBom.Enabled = dgvProducts.SelectedRows.Count > 0;
         if (dgvProducts.CurrentRow?.DataBoundItem is not ProductDto p) return;
         _editingId = p.ProductId;
         txtName.Text = p.ProductName;
@@ -123,6 +125,7 @@ public class frmProducts : Form
     {
         _editingId = null;
         dgvProducts.ClearSelection();
+        btnBom.Enabled = false;
         txtName.Clear();
         numPrice.Value = 0;
         chkActive.Checked = true;
@@ -189,6 +192,15 @@ public class frmProducts : Form
         {
             ErrorPresenter.Show(this, ex);
         }
+    }
+    private void BtnBom_Click(object? sender, EventArgs e)
+    {
+        if (dgvProducts.SelectedRows.Count == 0 ||
+            dgvProducts.SelectedRows[0].DataBoundItem is not ProductDto product)
+            return;
+
+        using var form = new frmBom(_api, product.ProductId, product.ProductName);
+        form.ShowDialog(this);
     }
 
 }
