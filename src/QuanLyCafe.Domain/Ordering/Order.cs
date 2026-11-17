@@ -1,3 +1,4 @@
+using QuanLyCafe.Domain.Common;
 using QuanLyCafe.Domain.Payment;
 using QuanLyCafe.Domain.Staff;
 
@@ -23,4 +24,11 @@ public class Order
     public User? Cashier { get; set; }
 
     public List<OrderDetail> OrderDetails { get; set; } = [];
+
+    // Quy tắc: order đã thanh toán (hoặc đã hủy) không sửa được → ERR-ORDER-001.
+    public void EnsureEditable()
+    {
+        if (Status != OrderStatus.Open)
+            throw new BusinessRuleException(ErrorCodes.OrderAlreadyPaid, "Order đã thanh toán hoặc đã hủy, không thể sửa.");
+    }
 }
