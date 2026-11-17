@@ -10,10 +10,16 @@ namespace QuanLyCafe.Api.Controllers.Catalog;
 
 public class CatalogController(CatalogService catalog) : ControllerBase
 {
+
     [HttpGet("menu")]
     [Authorize(Roles = "Manager,Cashier,Waiter")]
     public Task<List<MenuItemDto>> GetMenu(CancellationToken ct)
         => catalog.GetMenuAsync(ct);
+
+    [HttpGet("products/{id:guid}/bom")]
+    [Authorize(Roles = "Manager")]
+    public Task<List<BomLineDto>> GetBom(Guid id, CancellationToken ct)
+        => catalog.GetBomAsync(id, ct);
 
     [HttpPut("products/{id:guid}/bom")]
     [Authorize(Roles = "Manager")]

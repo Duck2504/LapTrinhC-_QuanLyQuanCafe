@@ -131,6 +131,30 @@ public class CatalogService(
 
         await repo.SaveChangesAsync(ct);
     }
+
+    public async Task<List<BomLineDto>> GetBomAsync(
+    Guid productId, CancellationToken ct)
+    {
+        var product = await repo.GetWithBomAsync(productId, ct)
+            ?? throw new NotFoundException("Không tìm thấy sản phẩm.");
+
+        if (product.ProductBOMs.Count == 0)
+            return [];
+
+        var materialsById = await materials.GetByIdsAsync(
+            product.ProductBOMs.Select(line => line.MaterialID), ct);
+
+        return product.ProductBOMs.Select(line =>
+        {
+            var material = materialsById[line.MaterialID];
+
+            return new BomLineDto(
+                line.MaterialID,
+                material.MaterialName,
+                material.Unit,
+                line.QuantityRequired);
+        }).ToList();
+    }
 }
 
 
