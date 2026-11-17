@@ -1,4 +1,6 @@
 namespace QuanLyCafe.Desktop;
+
+using QuanLyCafe.Desktop.Forms;
 using QuanLyCafe.Desktop.Services;
 
 static class Program
@@ -13,8 +15,21 @@ static class Program
     {
         // To customize application configuration such as set high DPI settings or default font,
         // see https://aka.ms/applicationconfiguration.
-        Api = new ApiClient(Session, "https://localhost:7001/");
+        Api = new ApiClient(Session, "https://localhost:7027/");
         ApplicationConfiguration.Initialize();
-        Application.Run(new Form1());
+        IAuthApi auth = new FakeAuthApi();
+
+        while (true)
+        {
+            using var login = new frmLogin(auth);
+            if (login.ShowDialog() != DialogResult.OK)
+                break;
+
+            using var main = new frmMain(auth);
+            Application.Run(main);
+
+            if (!main.LoggedOut)
+                break;
+        }
     }    
 }
