@@ -1,18 +1,27 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using QuanLyCafe.Application.Catalog;
 
 namespace QuanLyCafe.Api.Controllers.Catalog;
 
 [ApiController]
 [Route("api")]
 [Authorize]
+
 public class CatalogController(CatalogService catalog) : ControllerBase
 {
     [HttpGet("menu")]
     [Authorize(Roles = "Manager,Cashier,Waiter")]
     public Task<List<MenuItemDto>> GetMenu(CancellationToken ct)
+        => catalog.GetMenuAsync(ct);
+
+    [HttpPut("products/{id:guid}/bom")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> SetBom(
+        Guid id, SetBomRequest request, CancellationToken ct)
     {
-        return catalog.GetMenuAsync(ct);
+        await catalog.SetBomAsync(id, request, ct);
+        return NoContent();
     }
 
     [HttpGet("products")]
