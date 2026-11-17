@@ -18,4 +18,11 @@ public class ProductRepository(AppDbContext db) : IProductRepository
         await db.Products.AddAsync(p, ct);
 
     public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
+    public Task<Product?> GetWithBomAsync(Guid id, CancellationToken ct) =>
+        db.Products
+            .Include(p => p.ProductBOMs)
+            .FirstOrDefaultAsync(p => p.ProductID == id, ct);
+
+    public void RemoveBomLines(IEnumerable<ProductBOM> lines) =>
+        db.ProductBOMs.RemoveRange(lines);
 }

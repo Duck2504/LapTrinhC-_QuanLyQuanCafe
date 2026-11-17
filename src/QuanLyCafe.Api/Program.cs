@@ -16,6 +16,8 @@ using QuanLyCafe.Infrastructure.Repositories.Ordering;
 using QuanLyCafe.Infrastructure.Repositories.Staff;
 using Serilog;
 
+using QuanLyCafe.Api;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Serilog: console + file theo ngày, cấu hình trong appsettings "Serilog".
@@ -100,6 +102,8 @@ builder.Services.AddAuthorizationBuilder()
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+builder.Services.AddCatalogAndInventory();
 
 var app = builder.Build();
 
