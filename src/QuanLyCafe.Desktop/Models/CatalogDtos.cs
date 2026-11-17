@@ -15,3 +15,6 @@ public record BomLineDto(Guid MaterialId, string MaterialName, string Unit, deci
 // PUT /api/products/{id}/bom
 public record BomLineRequest(Guid MaterialId, decimal QuantityRequired);
 public record SaveBomRequest(List<BomLineRequest> Lines);
+
+public record CreateProductRequest(string ProductName, decimal Price);
+public record UpdateProductRequest(string ProductName, decimal Price, bool IsActive);

@@ -1,3 +1,5 @@
+
+using QuanLyCafe.Desktop.Forms.Catalog;
 using QuanLyCafe.Desktop.Services;
 
 namespace QuanLyCafe.Desktop.Forms;
@@ -35,7 +37,11 @@ public class frmMain : Form
             Add("Điều phối pha chế", "frmBar");                    // SCR_006
         if (manager)
         {
-            Add("Sản phẩm", "frmProducts");                        // SCR_007
+            _menu.Items.Add("Sản phẩm", null, (_, _) =>
+            {
+                using var form = new frmProducts(Program.Api);
+                form.ShowDialog(this);
+            });                        // SCR_007
             Add("Định lượng BOM", "frmBom");                       // SCR_008
             Add("Kho", "frmInventory");                            // SCR_009
             Add("Nhân viên", "frmStaff");                          // SCR_010
