@@ -1,0 +1,57 @@
+# Chạy API + SQL Server:   cp .env.example .env   (sửa giá trị)   →   docker compose up -d --build
+# Có tên miền, muốn HTTPS:  đặt DOMAIN trong .env  →   docker compose --profile https up -d --build
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD:?Thiếu SA_PASSWORD trong .env}
+    volumes:
+      - sqldata:/var/opt/mssql # giữ dữ liệu khi xóa/tạo lại container
+    ports:
+      - "127.0.0.1:1433:1433" # chỉ mở cho chính máy này (SSMS/Azure Data Studio), không ra Internet
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: src/QuanLyCafe.Api/Dockerfile
+    image: quanlycafe-api
+    depends_on:
+      db:
+        condition: service_healthy # API tự áp migration lúc khởi động nên phải chờ DB sẵn sàng
+    environment:
+      ConnectionStrings__Default: "Server=db;Database=QuanLyCafe;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
+      Jwt__Key: ${JWT_KEY:?Thiếu JWT_KEY trong .env}
+      Seed__ManagerPassword: ${MANAGER_PASSWORD:?Thiếu MANAGER_PASSWORD trong .env}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - apilogs:/app/logs
+    restart: unless-stopped
+
+  # Tùy chọn: HTTPS tự động (Let's Encrypt) khi deploy lên VPS có tên miền trỏ về.
+  caddy:
+    image: caddy:2
+    profiles: [https]
+    command: caddy reverse-proxy --from ${DOMAIN:-localhost} --to api:8080
+    depends_on: [api]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddydata:/data
+      - caddyconfig:/config
+    restart: unless-stopped
+
+volumes:
+  sqldata:
+  apilogs:
+  caddydata:
+  caddyconfig:

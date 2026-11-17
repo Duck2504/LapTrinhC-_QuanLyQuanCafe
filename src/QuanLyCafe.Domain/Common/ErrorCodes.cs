@@ -15,4 +15,5 @@ public static class ErrorCodes
     public const string PaymentGatewayFailed = "ERR-PAY-001";
     public const string PaymentInsufficientCash = "ERR-PAY-002";
     public const string ConcurrencyConflict = "ERR-CON-001";
+    public const string ValidationFailed = "ERR-VALIDATION";
 }

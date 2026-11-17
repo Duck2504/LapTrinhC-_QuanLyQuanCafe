@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [main, duc, nguyen, "duc-*", "nguyen-*"]
+  pull_request:
+    branches: [main]
+
+# Push mới lên cùng nhánh thì hủy lần chạy cũ.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: 10.0.x
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  backend:
+    name: Backend (Domain → Application → Infrastructure → Api)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      # Mỗi project một bước để biết ngay tầng nào hỏng.
+      - name: Build Domain
+        run: dotnet build src/QuanLyCafe.Domain -c Release
+      - name: Build Application
+        run: dotnet build src/QuanLyCafe.Application -c Release
+      - name: Build Infrastructure
+        run: dotnet build src/QuanLyCafe.Infrastructure -c Release
+      - name: Build Api
+        run: dotnet build src/QuanLyCafe.Api -c Release
+
+  desktop:
+    name: Desktop (WinForms)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Build Desktop
+        run: dotnet build src/QuanLyCafe.Desktop -c Release
+
+  tests:
+    name: Tests (xUnit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: dotnet test
+        run: dotnet test tests/QuanLyCafe.Tests -c Release
+
+  migrations:
+    name: Migration khớp model
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Cài dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.13
+      # dotnet ef cần obj/project.assets.json → phải restore/build trước.
+      - name: Build Api
+        run: dotnet build src/QuanLyCafe.Api
+      # Đổi entity/config mà quên tạo migration → job đỏ. Không cần DB thật.
+      - name: Kiểm tra thay đổi model chưa có migration
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
+          ConnectionStrings__Default: Server=none;Database=ci
+        run: >
+          dotnet ef migrations has-pending-model-changes --no-build
+          --project src/QuanLyCafe.Infrastructure
+          --startup-project src/QuanLyCafe.Api
+
+  docker:
+    name: Docker image API (GHCR)
+    needs: [backend, tests, migrations]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # Chỉ đẩy image khi push lên main; nhánh khác/PR chỉ build để kiểm Dockerfile.
+      PUSH_IMAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Đăng nhập GHCR
+        if: env.PUSH_IMAGE == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/quanlycafe-api
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+      - name: Build (và push nếu là main)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/QuanLyCafe.Api/Dockerfile
+          push: ${{ env.PUSH_IMAGE == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  compose:
+    name: Docker Compose chạy thử (API + SQL Server)
+    needs: [backend, tests, migrations]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tạo .env với mật khẩu ngẫu nhiên
+        run: |
+          {
+            echo "SA_PASSWORD=Ci_$(openssl rand -hex 12)"
+            echo "JWT_KEY=$(openssl rand -hex 32)"
+            echo "MANAGER_PASSWORD=Ci_$(openssl rand -hex 8)"
+          } > .env
+      - name: docker compose up
+        run: docker compose up -d --build
+      - name: Chờ /health
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/health && exit 0
+            sleep 3
+          done
+          exit 1
+      - name: Đăng nhập manager
+        run: |
+          set -a; . ./.env; set +a
+          curl -fsS -X POST http://localhost:8080/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"manager\",\"password\":\"$MANAGER_PASSWORD\"}" | grep -q '"role":"Manager"'
+      - name: Log khi lỗi
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Dọn dẹp
+        if: always()
+        run: docker compose down -v
