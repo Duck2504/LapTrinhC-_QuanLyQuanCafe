@@ -32,4 +32,21 @@ public class OrdersController(OrderService orders) : ControllerBase
     [HttpPost("orders/{id:guid}/submit")]
     [Authorize(Roles = "Cashier,Waiter")]
     public Task<OrderDto> Submit(Guid id, CancellationToken ct) => orders.SubmitAsync(id, ct);
+
+    [HttpGet("bar/tickets")]
+    [Authorize(Roles = "Manager,Barista")]
+    public Task<List<BarTicketDto>> GetBarTickets(CancellationToken ct) => orders.GetBarTicketsAsync(ct);
+
+    [HttpPut("order-items/{id:guid}/status")]
+    [Authorize(Roles = "Barista,Waiter")]
+    public Task<OrderItemDto> UpdateItemStatus(Guid id, UpdateItemStatusRequest req, CancellationToken ct) =>
+        orders.UpdateItemStatusAsync(id, req, User.IsInRole("Waiter"), ct);
+
+    [HttpPost("order-items/{id:guid}/unavailable")]
+    [Authorize(Roles = "Barista")]
+    public async Task<IActionResult> ReportUnavailable(Guid id, CancellationToken ct)
+    {
+        await orders.ReportUnavailableAsync(id, ct);
+        return NoContent();
+    }
 }

@@ -65,7 +65,6 @@ public class OrderService(IOrderRepository orders, IInventoryService inventory, 
         if (items.Any(i => i.Note?.Trim().Length > MaxNoteLength))
             throw new ValidationException(ErrorCodes.ValidationFailed, $"Ghi chú tối đa {MaxNoteLength} ký tự.");
 
-        // Dòng có Id = món đã có trong order: chỉ sửa SL/ghi chú, giữ OrderDetailID và giá đã chép (phiếu Bar không đổi ID).
         var existing = items.Where(i => i.Id is not null).ToList();
         var byId = order.OrderDetails.ToDictionary(d => d.OrderDetailID);
         if (existing.Select(i => i.Id).Distinct().Count() != existing.Count
@@ -105,12 +104,9 @@ public class OrderService(IOrderRepository orders, IInventoryService inventory, 
         order.TotalAmount = kept.Concat(added).Sum(d => d.Quantity * d.UnitPrice);
         await orders.SaveChangesAsync(ct);
 
-        // Trả đúng danh sách sau khi sửa, không phụ thuộc EF đã đồng bộ collection hay chưa.
         return ToDto(order) with { Items = kept.Concat(added).Select(ToItemDto).ToList() };
     }
 
-    // Gửi các món đang Chờ xuống Bar. Đọc trong lock order để PUT đồng thời không đổi món giữa lúc kiểm kho và lúc phát phiếu;
-    // TicketCreated phát SAU khi lock/transaction đóng. Gửi lại phát toàn bộ món còn Chờ — Bar khớp theo OrderDetailID nên không trùng.
     public async Task<OrderDto> SubmitAsync(Guid id, CancellationToken ct = default)
     {
         var (dto, ticket) = await orders.InOrderLockAsync(id, async () =>
@@ -130,6 +126,53 @@ public class OrderService(IOrderRepository orders, IInventoryService inventory, 
 
         await notifier.TicketCreatedAsync(ticket, ct);
         return dto;
+    }
+
+        public async Task<List<BarTicketDto>> GetBarTicketsAsync(CancellationToken ct = default) =>
+        (await orders.GetOpenOrdersAsync(ct))
+            .Select(o => new BarTicketDto(o.OrderID, o.Table?.TableName, o.OrderDate,
+                o.OrderDetails.Where(d => d.Status != OrderDetailStatus.Delivered).Select(ToItemDto).ToList()))
+            .Where(t => t.Items.Count > 0)
+            .OrderBy(t => t.OrderDate)
+            .ToList();
+
+    public async Task<OrderItemDto> UpdateItemStatusAsync(Guid itemId, UpdateItemStatusRequest req, bool byWaiter, CancellationToken ct = default)
+    {
+        var allowed = byWaiter
+            ? req.Status == OrderDetailStatus.Delivered
+            : req.Status is OrderDetailStatus.Preparing or OrderDetailStatus.Done;
+        if (!allowed)
+            throw new ValidationException(ErrorCodes.ValidationFailed,
+                byWaiter ? "Phục vụ chỉ được chuyển món sang Đã giao." : "Pha chế chỉ được chuyển món sang Đang làm hoặc Xong.");
+
+        var orderId = await orders.GetOrderIdOfDetailAsync(itemId, ct) ?? throw new NotFoundException("Không tìm thấy món.");
+        var (dto, change) = await orders.InOrderLockAsync(orderId, async () =>
+        {
+            var order = await GetOrderAsync(orderId, ct);
+            order.EnsureEditable();
+            var d = order.OrderDetails.FirstOrDefault(x => x.OrderDetailID == itemId) ?? throw new NotFoundException("Không tìm thấy món.");
+            if (d.Status != req.Status - 1)
+                throw new ConflictException(ErrorCodes.ConcurrencyConflict, $"{d.Product.ProductName} đang ở trạng thái khác, hãy tải lại danh sách.");
+
+            d.Status = req.Status;
+            await orders.SaveChangesAsync(ct);
+            return (ToItemDto(d), new ItemStatusChangedDto(d.OrderDetailID, order.OrderID, d.Status));
+        }, ct);
+
+        await notifier.ItemStatusChangedAsync(change, CancellationToken.None); // sau commit; client hủy request thì vẫn phải báo
+        return dto;
+    }
+
+    public async Task ReportUnavailableAsync(Guid itemId, CancellationToken ct = default)
+    {
+        var orderId = await orders.GetOrderIdOfDetailAsync(itemId, ct) ?? throw new NotFoundException("Không tìm thấy món.");
+        var order = await GetOrderAsync(orderId, ct);
+        order.EnsureEditable();
+        var d = order.OrderDetails.FirstOrDefault(x => x.OrderDetailID == itemId) ?? throw new NotFoundException("Không tìm thấy món.");
+        if (d.Status != OrderDetailStatus.Pending)
+            throw new ConflictException(ErrorCodes.ConcurrencyConflict, $"{d.Product.ProductName} đã bắt đầu làm, không báo hết được.");
+
+        await notifier.ItemUnavailableAsync(new ItemUnavailableDto(d.ProductID, d.Product.ProductName, order.OrderID, order.Table?.TableName), CancellationToken.None);
     }
 
     private async Task<Order> GetOrderAsync(Guid id, CancellationToken ct) =>
