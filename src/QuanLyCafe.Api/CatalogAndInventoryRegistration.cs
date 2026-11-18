@@ -3,6 +3,7 @@ using QuanLyCafe.Domain.Catalog;
 using QuanLyCafe.Infrastructure.Repositories.Inventory;
 using QuanLyCafe.Application.Inventory;
 
+
 namespace QuanLyCafe.Api;
 
 public static class CatalogAndInventoryRegistration
@@ -14,6 +15,8 @@ public static class CatalogAndInventoryRegistration
         services.AddScoped<IMaterialRepository, MaterialRepository>();
         services.AddScoped<CatalogService>();
         services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<IStockMovementRepository, StockMovementRepository>();
+        services.AddScoped<StockService>();
 
         return services;
     }

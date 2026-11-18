@@ -9,7 +9,7 @@ public class frmBom : Form
     private const decimal MaxQuantity = 999_999_999_999_999.999m;
 
     private readonly ApiClient _api;
-    private readonly Guid _productId;
+    private Guid _productId;
     private readonly BindingList<BomRow> _rows = new();
 
     private readonly DataGridView _grid = new();
@@ -19,15 +19,29 @@ public class frmBom : Form
     private readonly Button _remove = new() { Text = "Xóa dòng", AutoSize = true };
     private readonly Button _save = new() { Text = "Lưu BOM", AutoSize = true };
 
-    public frmBom(ApiClient api, Guid productId, string productName)
+
+    private readonly ComboBox _products = new()
+    {
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        DisplayMember = nameof(ProductDto.ProductName),
+        Dock = DockStyle.Top
+    };
+    public frmBom(ApiClient api, Guid productId = default, string? productName = null)
     {
         _api = api;
         _productId = productId;
         BuildUi(productName);
-        Shown += async (_, _) => await LoadBomAsync();
+
+        Shown += async (_, _) =>
+        {
+            if (_productId == Guid.Empty)
+                await LoadProductsAsync();
+            else
+                await LoadBomAsync();
+        };
     }
 
-    private void BuildUi(string productName)
+    private void BuildUi(string? productName)
     {
         Text = "Thiết lập BOM";
         StartPosition = FormStartPosition.CenterParent;
@@ -103,8 +117,58 @@ public class frmBom : Form
 
         Controls.Add(_grid);
         Controls.Add(actions);
+        if (_productId == Guid.Empty)
+        {
+            title.Text = "Chọn sản phẩm cần thiết lập BOM";
+            Controls.Add(_products);
+            _products.SelectionChangeCommitted += async (_, _) =>
+                await SelectProductAsync();
+        }
+
         Controls.Add(title);
         SetEditingEnabled(false);
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        try
+        {
+            var products = await _api.GetAsync<List<ProductDto>>("/api/products");
+            if (IsDisposed)
+                return;
+
+            if (products is not { Count: > 0 })
+            {
+                MessageBox.Show(this, "Chưa có sản phẩm để thiết lập BOM.");
+                return;
+            }
+
+            _products.DataSource = products;
+            _products.SelectedIndex = -1;
+        }
+        catch (ApiException ex)
+        {
+            if (!IsDisposed)
+                ErrorPresenter.Show(this, ex);
+        }
+    }
+
+    private async Task SelectProductAsync()
+    {
+        if (_products.SelectedItem is not ProductDto product)
+            return;
+
+        _products.Enabled = false;
+        _productId = product.ProductId;
+        Text = $"Thiết lập BOM — {product.ProductName}";
+
+        await LoadBomAsync();
+
+        if (!IsDisposed && !_save.Enabled)
+        {
+            _products.SelectedIndex = -1;
+            _products.Enabled = true;
+        }
     }
 
     private async Task LoadBomAsync()

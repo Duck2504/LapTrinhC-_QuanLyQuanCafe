@@ -52,3 +52,31 @@ Content-Type: application/json
 { "items": [ { "productId": "<id sản phẩm>", "quantity": 2, "note": "ít đá" } ] }
 
 ###
+
+@materialId = <dán materialId thật>
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/materials
+Authorization: Bearer {{token}}
+
+###
+
+POST {{QuanLyCafe.Api_HostAddress}}/api/stock/receipts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "materialId": "{{materialId}}", "quantity": 100, "note": "Test nhập kho" }
+
+###
+
+POST {{QuanLyCafe.Api_HostAddress}}/api/stock/issues
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "materialId": "{{materialId}}", "quantity": 30, "note": "Test xuất kho" }
+
+###
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/stock/movements?page=1&pageSize=1
+Authorization: Bearer {{token}}
+
+###
