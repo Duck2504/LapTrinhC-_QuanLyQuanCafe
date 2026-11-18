@@ -1,5 +1,7 @@
 
 using QuanLyCafe.Desktop.Forms.Catalog;
+using QuanLyCafe.Desktop.Forms.Ordering;
+using QuanLyCafe.Desktop.Forms.Staff;
 using QuanLyCafe.Desktop.Services;
 
 namespace QuanLyCafe.Desktop.Forms;
@@ -30,11 +32,11 @@ public class frmMain : Form
              waiter = role == "Waiter",   barista = role == "Barista";
 
         if (manager || cashier || waiter)
-            Add("Gọi món", "frmPOS");                              // SCR_004
+            Add("Gọi món", "frmPOS", () => new frmPOS());          // SCR_004
         if (manager || cashier)
             Add("Thanh toán", "frmPayment");                       // SCR_005
         if (manager || barista)
-            Add("Điều phối pha chế", "frmBar");                    // SCR_006
+            Add("Điều phối pha chế", "frmBar", () => new frmBar()); // SCR_006
         if (manager)
         {
             _menu.Items.Add("Sản phẩm", null, (_, _) =>
@@ -44,7 +46,7 @@ public class frmMain : Form
             });                        // SCR_007
             Add("Định lượng BOM", "frmBom");                       // SCR_008
             Add("Kho", "frmInventory");                            // SCR_009
-            Add("Nhân viên", "frmStaff");                          // SCR_010
+            Add("Nhân viên", "frmStaff", () => new frmStaff());    // SCR_010
             Add("Báo cáo", "frmReport");                           // SCR_011
         }
 
@@ -63,11 +65,14 @@ public class frmMain : Form
         _menu.Items.Add(account);
     }
 
-    private void Add(string text, string formName)
+    private void Add(string text, string formName, Func<Form>? open = null)
     {
-        // Các form thật sẽ được nối vào ở những ngày sau
         _menu.Items.Add(text, null, (_, _) =>
-            MessageBox.Show(this, $"{formName} chưa làm", text));
+        {
+            if (open is null) { MessageBox.Show(this, $"{formName} chưa làm", text); return; }
+            using var f = open();
+            f.ShowDialog(this);
+        });
     }
 
     internal void ForceLogout()

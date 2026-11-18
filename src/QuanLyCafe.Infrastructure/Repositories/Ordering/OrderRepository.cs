@@ -27,6 +27,15 @@ public class OrderRepository(AppDbContext db) : IOrderRepository
             .Include(o => o.OrderDetails).ThenInclude(d => d.Product)
             .FirstOrDefaultAsync(o => o.OrderID == orderId, ct);
 
+    public Task<List<Order>> GetOpenOrdersAsync(CancellationToken ct = default) =>
+        db.Orders.Where(o => o.Status == OrderStatus.Open)
+            .Include(o => o.Table)
+            .Include(o => o.OrderDetails).ThenInclude(d => d.Product)
+            .AsNoTracking().ToListAsync(ct);
+
+    public Task<Guid?> GetOrderIdOfDetailAsync(Guid orderDetailId, CancellationToken ct = default) =>
+        db.OrderDetails.Where(d => d.OrderDetailID == orderDetailId).Select(d => (Guid?)d.OrderID).FirstOrDefaultAsync(ct);
+
     public Task<List<Product>> GetProductsAsync(IEnumerable<Guid> productIds, CancellationToken ct = default)
     {
         var ids = productIds.ToList();
@@ -35,7 +44,6 @@ public class OrderRepository(AppDbContext db) : IOrderRepository
 
     public void Add(Order order) => db.Orders.Add(order);
 
-    // Add tường minh: OrderDetailID đã có giá trị nên nếu chỉ thêm vào collection EF sẽ hiểu nhầm là UPDATE.
     public void AddDetails(IEnumerable<OrderDetail> details) => db.OrderDetails.AddRange(details);
 
     public void RemoveDetails(IEnumerable<OrderDetail> details) => db.OrderDetails.RemoveRange(details);
@@ -43,7 +51,6 @@ public class OrderRepository(AppDbContext db) : IOrderRepository
     public async Task<T> InOrderLockAsync<T>(Guid orderId, Func<Task<T>> work, CancellationToken ct = default)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        // Request thứ hai trên cùng order chờ ở đây tới khi request đầu commit/rollback.
         await db.Database.ExecuteSqlAsync($"SELECT 1 FROM Orders WITH (UPDLOCK, ROWLOCK) WHERE OrderID = {orderId}", ct);
         var result = await work();
         await tx.CommitAsync(ct);
@@ -58,7 +65,6 @@ public class OrderRepository(AppDbContext db) : IOrderRepository
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 })
         {
-            // Unique index duy nhất của Orders là "một bàn một order mở" (OrderConfiguration).
             throw new ConflictException(ErrorCodes.OrderTableHasOpenOrder, "Bàn này đã có order đang mở.");
         }
     }
