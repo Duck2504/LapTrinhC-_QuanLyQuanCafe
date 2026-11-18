@@ -17,13 +17,7 @@ public class frmPOS : Form
         public int Quantity { get; set; } = 1;
         public string? Note { get; set; }
         public OrderDetailStatus Status { get; init; }
-        public string StatusText => Status switch
-        {
-            OrderDetailStatus.Pending => "Chờ",
-            OrderDetailStatus.Preparing => "Đang làm",
-            OrderDetailStatus.Done => "Xong",
-            _ => "Đã giao",
-        };
+        public string StatusText => StatusName(Status);
         public decimal Amount => Quantity * UnitPrice;
     }
 
@@ -42,6 +36,11 @@ public class frmPOS : Form
     private readonly Button btnAdd = new() { Text = "Thêm món →", Dock = DockStyle.Bottom, Height = 32 };
     private readonly Button btnRemove = new() { Text = "Xóa món", AutoSize = true };
     private readonly Button btnSubmit = new() { Text = "Gửi pha chế", AutoSize = true };
+    private readonly Button btnDeliver = new() { Text = "Đã giao", AutoSize = true };
+    private readonly Button btnMerge = new() { Text = "Gộp bàn...", AutoSize = true };
+    private readonly Button btnSplit = new() { Text = "Tách món...", AutoSize = true };
+    private readonly Label lblNotice = new() { Dock = DockStyle.Bottom, Height = 30, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+    private readonly BarHubClient _hub = new(Program.BaseUrl, Program.Session);
 
     private readonly BindingList<Line> _lines = [];
     private OrderDto? _order;
@@ -76,7 +75,7 @@ public class frmPOS : Form
 
         var orderBox = new GroupBox { Text = "Order", Dock = DockStyle.Fill };
         var orderButtons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true };
-        orderButtons.Controls.AddRange([btnRemove, btnSubmit, lblTotal]);
+        orderButtons.Controls.AddRange([btnRemove, btnSubmit, btnDeliver, btnMerge, btnSplit, lblTotal]);
         orderBox.Controls.Add(grid);
         orderBox.Controls.Add(lblOrder);
         orderBox.Controls.Add(orderButtons);
@@ -84,10 +83,23 @@ public class frmPOS : Form
         Controls.Add(orderBox);
         Controls.Add(menuBox);
         Controls.Add(tablesBox);
+        Controls.Add(lblNotice);
 
         lstMenu.Format += (_, e) => { if (e.ListItem is MenuItemDto m) e.Value = $"{m.ProductName} — {m.Price:N0}đ"; };
-        Load += async (_, _) => await RunAsync(LoadAsync);
-        btnRefresh.Click += async (_, _) => await RunAsync(RefreshAsync);
+        // Tải dữ liệu trước: hub chậm/mất kết nối không được chặn sơ đồ bàn.
+        Load += async (_, _) => { await RunAsync(LoadAsync); await ConnectHubAsync(); };
+        btnRefresh.Click += async (_, _) => { await RunAsync(RefreshAsync); await ConnectHubAsync(); };
+        btnDeliver.Click += async (_, _) => await RunAsync(DeliverAsync);
+        btnMerge.Click += async (_, _) => await RunAsync(MergeAsync);
+        btnSplit.Click += async (_, _) => await RunAsync(SplitAsync);
+        _hub.ItemStatusChanged += OnItemStatusChanged;
+        _hub.ItemUnavailable += OnItemUnavailable;
+        FormClosed += async (_, _) =>
+        {
+            _hub.ItemStatusChanged -= OnItemStatusChanged;
+            _hub.ItemUnavailable -= OnItemUnavailable;
+            await _hub.DisposeAsync();
+        };
         btnTakeaway.Click += async (_, _) => await RunAsync(OpenTakeawayAsync);
         btnAdd.Click += (_, _) => AddSelectedMenuItem();
         lstMenu.DoubleClick += (_, _) => AddSelectedMenuItem();
@@ -171,6 +183,8 @@ public class frmPOS : Form
             : $"{o.TableName ?? "Mang đi"} — order lúc {o.OrderDate:HH:mm}" + (o.Status == OrderStatus.Open ? "" : " (đã đóng)");
         var editable = o?.Status == OrderStatus.Open;
         btnAdd.Enabled = btnRemove.Enabled = btnSubmit.Enabled = editable;
+        btnDeliver.Enabled = editable && Program.Session.Role == "Waiter"; // API chỉ cho Phục vụ chuyển Đã giao
+        btnMerge.Enabled = btnSplit.Enabled = editable && o!.TableId is not null;
         grid.ReadOnly = !editable;
         UpdateTotal();
     }
@@ -196,7 +210,6 @@ public class frmPOS : Form
         UpdateTotal();
     }
 
-    // Không có nút Lưu riêng: món Chờ luôn là món đã gửi Bar. Lưu (PUT, kèm Id dòng cũ) rồi gửi (submit → TicketCreated);
     // thiếu nguyên liệu → ERR-STOCK-001 / ERR-BOM-001, món Bar đã bắt đầu làm → ERR-CON-001.
     private async Task SubmitAsync()
     {
@@ -208,13 +221,130 @@ public class frmPOS : Form
         MessageBox.Show(this, "Đã gửi order xuống pha chế.", Text);
     }
 
+    // Phục vụ bấm Đã giao cho món Bar đã làm Xong.
+    private async Task DeliverAsync()
+    {
+        if (Selected is not { Id: { } id } l || l.Status != OrderDetailStatus.Done)
+        {
+            MessageBox.Show(this, "Chọn món đang ở trạng thái Xong để giao.", Text);
+            return;
+        }
+        if (!ConfirmDiscard()) return;
+        await Program.Api.PutAsync($"api/order-items/{id}/status", new UpdateItemStatusRequest(OrderDetailStatus.Delivered));
+        ShowOrder(await Program.Api.GetAsync<OrderDto>($"api/orders/{_order!.Id}"));
+    }
+
+    // Gộp toàn bộ món bàn đang mở vào một bàn khác đang có order; bàn này về Trống.
+    private async Task MergeAsync()
+    {
+        if (!ConfirmDiscard()) return;
+        var tables = (await Program.Api.GetAsync<List<TableDto>>("api/tables") ?? [])
+            .Where(t => t.OpenOrderId is not null && t.Id != _order!.TableId).ToList();
+        if (tables.Count == 0) { MessageBox.Show(this, "Không có bàn nào khác đang có order để gộp.", Text); return; }
+        if (PickTable($"Gộp {_order!.TableName} vào bàn", tables, 0) is not { } pick) return;
+
+        ShowOrder(await Program.Api.PostAsync<OrderDto>("api/tables/merge", new { sourceTableId = _order.TableId, targetTableId = pick.Table.Id }));
+        await LoadTablesAsync();
+    }
+
+    // Tách món đang chọn (một phần hoặc cả dòng) sang bàn khác; bàn trống sẽ được mở order mới.
+    private async Task SplitAsync()
+    {
+        if (!ConfirmDiscard()) return;
+        if (Selected is not { Id: { } id } l) { MessageBox.Show(this, "Chọn một món đã gửi để tách.", Text); return; }
+        var tables = (await Program.Api.GetAsync<List<TableDto>>("api/tables") ?? []).Where(t => t.Id != _order!.TableId).ToList();
+        if (PickTable($"Tách {l.ProductName} sang bàn", tables, l.Quantity) is not { } pick) return;
+
+        await Program.Api.PostAsync<OrderDto>("api/tables/split", new
+        {
+            sourceTableId = _order!.TableId,
+            targetTableId = pick.Table.Id,
+            items = new[] { new { orderItemId = id, quantity = pick.Quantity } },
+        });
+        ShowOrder(await Program.Api.GetAsync<OrderDto>($"api/orders/{_order.Id}"));
+        await LoadTablesAsync();
+    }
+
+    // Hộp chọn bàn đích (+ số lượng khi maxQuantity > 0). null = hủy.
+    private (TableDto Table, int Quantity)? PickTable(string title, List<TableDto> tables, int maxQuantity)
+    {
+        using var f = new Form
+        {
+            Text = title, FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
+            MinimizeBox = false, MaximizeBox = false, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(12),
+        };
+        var cbo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 240, DisplayMember = nameof(TableDto.Name) };
+        cbo.Items.AddRange([.. tables]);
+        if (tables.Count > 0) cbo.SelectedIndex = 0;
+        var qty = new NumericUpDown { Minimum = 1, Maximum = Math.Max(1, maxQuantity), Value = Math.Max(1, maxQuantity), Width = 80 };
+        var ok = new Button { Text = "Đồng ý", DialogResult = DialogResult.OK, AutoSize = true };
+        var cancel = new Button { Text = "Hủy", DialogResult = DialogResult.Cancel, AutoSize = true };
+        var panel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill };
+        panel.Controls.AddRange([new Label { Text = "Bàn đích", AutoSize = true }, cbo]);
+        if (maxQuantity > 0) panel.Controls.AddRange([new Label { Text = $"Số lượng (tối đa {maxQuantity})", AutoSize = true }, qty]);
+        var buttons = new FlowLayoutPanel { AutoSize = true };
+        buttons.Controls.AddRange([ok, cancel]);
+        panel.Controls.Add(buttons);
+        f.Controls.Add(panel);
+        f.AcceptButton = ok;
+        f.CancelButton = cancel;
+
+        if (f.ShowDialog(this) != DialogResult.OK || cbo.SelectedItem is not TableDto t) return null;
+        return (t, (int)qty.Value);
+    }
+
+    // BarHub: kết nối lỗi vẫn dùng form được, chỉ không nhận thông báo realtime (bấm Làm mới để thử lại).
+    private async Task ConnectHubAsync()
+    {
+        try
+        {
+            await _hub.StartAsync();
+            if (lblNotice.ForeColor == Color.Gray) lblNotice.Text = "";
+        }
+        catch (Exception) { lblNotice.ForeColor = Color.Gray; lblNotice.Text = "Chưa nhận được thông báo pha chế (mất kết nối) — bấm Làm mới để thử lại."; }
+    }
+
+    private void OnItemStatusChanged(ItemStatusChangedDto c) => OnUi(async () =>
+    {
+        lblNotice.ForeColor = c.Status == OrderDetailStatus.Done ? Color.DarkGreen : Color.Black;
+        lblNotice.Text = $"{DateTime.Now:HH:mm} {c.TableName ?? "Mang đi"}: {c.ProductName} → {StatusName(c.Status)}";
+        if (c.OrderId != _order?.Id || _dirty || !Enabled) return;
+        try
+        {
+            var fresh = await Program.Api.GetAsync<OrderDto>($"api/orders/{c.OrderId}");
+            if (c.OrderId == _order?.Id && !_dirty && Enabled) ShowOrder(fresh); // trong lúc chờ có thể đã sửa món / đổi bàn
+        }
+        catch (Exception) { }
+    });
+
+    private void OnItemUnavailable(ItemUnavailableDto u) => OnUi(() =>
+    {
+        lblNotice.ForeColor = Color.Red;
+        lblNotice.Text = $"{DateTime.Now:HH:mm} HẾT NGUYÊN LIỆU: {u.ProductName} ({u.TableName ?? "Mang đi"}) — báo khách đổi món.";
+        System.Media.SystemSounds.Exclamation.Play();
+    });
+
+    private void OnUi(Action a)
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        try { BeginInvoke(a); }
+        catch (InvalidOperationException) { }
+    }
+
+    private static string StatusName(OrderDetailStatus s) => s switch
+    {
+        OrderDetailStatus.Pending => "Chờ",
+        OrderDetailStatus.Preparing => "Đang làm",
+        OrderDetailStatus.Done => "Xong",
+        _ => "Đã giao",
+    };
+
     private void UpdateTotal() => lblTotal.Text = $"Tổng: {_lines.Sum(l => l.Amount):N0}đ";
 
     private bool ConfirmDiscard() =>
         !_dirty || MessageBox.Show(this, "Order có món chưa lưu. Bỏ các thay đổi này?", Text,
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
 
-    // Khóa form khi đang gọi API; lỗi hiện qua ErrorPresenter theo mã ERR-*.
     private async Task RunAsync(Func<Task> action)
     {
         UseWaitCursor = true;

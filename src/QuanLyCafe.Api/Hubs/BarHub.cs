@@ -25,4 +25,7 @@ public class BarHubNotifier(IHubContext<BarHub> hub) : IRealtimeNotifier
 
     public Task ItemUnavailableAsync(ItemUnavailableDto item, CancellationToken ct = default) =>
         hub.Clients.Groups("Waiter", "Cashier").SendAsync("ItemUnavailable", item, ct);
+
+    public Task LowStockAlertAsync(LowStockAlertDto alert, CancellationToken ct = default) =>
+        hub.Clients.Group("Manager").SendAsync("LowStockAlert", alert, ct);
 }

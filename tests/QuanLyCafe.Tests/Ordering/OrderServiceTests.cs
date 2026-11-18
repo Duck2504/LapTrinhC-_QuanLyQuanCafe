@@ -10,6 +10,7 @@ namespace QuanLyCafe.Tests.Ordering;
 public class OrderServiceTests
 {
     private readonly Table _ban1 = new() { TableName = "Bàn 1" };
+    private readonly Table _ban2 = new() { TableName = "Bàn 2" };
     private readonly Product _cafeSua = new() { ProductName = "Cà phê sữa", Price = 25000 };
     private readonly Product _ngungBan = new() { ProductName = "Trà đào", Price = 30000, IsActive = false };
     private readonly FakeOrders _repo;
@@ -267,6 +268,111 @@ public class OrderServiceTests
         Assert.Single(_notifier.Unavailable);
     }
 
+    // Bàn 1: 1 + 2 Cà phê sữa (dòng đầu đang làm); Bàn 2: 1 Cà phê sữa.
+    private async Task<(OrderDto Ban1, OrderDto Ban2)> HaiBanCoOrder()
+    {
+        _repo.Tables.Add(_ban2);
+        var (ban1, first, _) = await Ban1CoHaiMon();
+        _repo.Orders[0].OrderDetails.Single(d => d.OrderDetailID == first).Status = OrderDetailStatus.Preparing;
+        var ban2 = await _service.CreateAsync(new CreateOrderRequest(OrderType.DineIn, _ban2.TableID), _waiterId);
+        await _service.UpdateItemsAsync(ban2.Id, new([new(_cafeSua.ProductID, 1, null)]));
+        return (await _service.GetAsync(ban1), await _service.GetAsync(ban2.Id));
+    }
+
+    [Fact]
+    public async Task Gop_ban_chuyen_het_mon_giu_id_va_trang_thai_huy_order_nguon_tra_ban_trong()
+    {
+        var (ban1, ban2) = await HaiBanCoOrder();
+
+        var dto = await _service.MergeTablesAsync(new(_ban1.TableID, _ban2.TableID));
+
+        Assert.Equal(ban2.Id, dto.Id);
+        Assert.Equal(ban1.Items.Concat(ban2.Items).Select(i => (i.Id, i.Status, i.Quantity)).OrderBy(x => x.Id),
+            dto.Items.Select(i => (i.Id, i.Status, i.Quantity)).OrderBy(x => x.Id));
+        Assert.Equal(4 * 25000, dto.TotalAmount);
+        var nguon = _repo.Orders.Single(o => o.OrderID == ban1.Id);
+        Assert.Equal((OrderStatus.Cancelled, 0m, 0), (nguon.Status, nguon.TotalAmount, nguon.OrderDetails.Count));
+        Assert.Equal((TableStatus.Empty, TableStatus.Serving), (_ban1.Status, _ban2.Status));
+        Assert.Equal(ban2.Id, Assert.Single(await _service.GetTablesAsync(), t => t.OpenOrderId is not null).OpenOrderId);
+        Assert.Contains(ban1.Id, _repo.LockedOrders.TakeLast(2));
+        Assert.Contains(ban2.Id, _repo.LockedOrders.TakeLast(2));
+        Assert.Equal(ban2.Id, _notifier.Tickets.Last().OrderId); // Bar tải lại để thấy món đổi bàn
+    }
+
+    [Fact]
+    public async Task Gop_ban_sai_bi_chan()
+    {
+        _repo.Tables.Add(_ban2);
+        await Assert.ThrowsAsync<ValidationException>(() => _service.MergeTablesAsync(new(_ban1.TableID, _ban2.TableID))); // bàn nguồn chưa có order
+        await MoBan1();
+        await Assert.ThrowsAsync<ValidationException>(() => _service.MergeTablesAsync(new(_ban1.TableID, _ban2.TableID))); // bàn đích trống
+        await Assert.ThrowsAsync<ValidationException>(() => _service.MergeTablesAsync(new(_ban1.TableID, _ban1.TableID)));
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.MergeTablesAsync(new(_ban1.TableID, Guid.NewGuid())));
+
+        var ban2 = await _service.CreateAsync(new CreateOrderRequest(OrderType.DineIn, _ban2.TableID), _waiterId);
+        _repo.Orders.Single(o => o.OrderID == ban2.Id).Status = OrderStatus.Paid; // order bàn đích đã thanh toán
+        await Assert.ThrowsAsync<ValidationException>(() => _service.MergeTablesAsync(new(_ban1.TableID, _ban2.TableID)));
+        Assert.Equal(OrderStatus.Open, _repo.Orders[0].Status);
+    }
+
+    [Fact]
+    public async Task Tach_mot_phan_sang_ban_trong_mo_order_moi_roi_tach_nguyen_dong_sang_ban_do()
+    {
+        _repo.Tables.Add(_ban2);
+        var (ban1, first, second) = await Ban1CoHaiMon();
+        _repo.Orders[0].OrderDetails.Single(d => d.OrderDetailID == second).Status = OrderDetailStatus.Done;
+
+        var moi = await _service.SplitTableAsync(new(_ban1.TableID, _ban2.TableID, [new(second, 1)]), _waiterId);
+
+        Assert.NotEqual(ban1, moi.Id);
+        Assert.Equal(("Bàn 2", TableStatus.Serving), (moi.TableName, _ban2.Status));
+        var tach = Assert.Single(moi.Items);
+        Assert.Equal((1, 25000m, OrderDetailStatus.Done), (tach.Quantity, tach.UnitPrice, tach.Status));
+        var nguon = await _service.GetAsync(ban1);
+        Assert.Equal((2, 2 * 25000m), (nguon.Items.Count, nguon.TotalAmount));
+        Assert.Equal(1, nguon.Items.Single(i => i.Id == second).Quantity);
+
+        var dto = await _service.SplitTableAsync(new(_ban1.TableID, _ban2.TableID, [new(first, 1)]), _waiterId);
+
+        Assert.Equal(moi.Id, dto.Id); // bàn đích đã có order → thêm vào order đó
+        Assert.Contains(dto.Items, i => i.Id == first); // tách nguyên dòng giữ ID
+        Assert.Equal(2 * 25000, dto.TotalAmount);
+        Assert.Equal(25000, (await _service.GetAsync(ban1)).TotalAmount);
+        Assert.Equal(2, _notifier.Tickets.Count);
+    }
+
+    [Fact]
+    public async Task Tach_het_mon_qua_so_luong_hoac_sai_dong_bi_chan()
+    {
+        _repo.Tables.Add(_ban2);
+        var (_, first, second) = await Ban1CoHaiMon();
+
+        Task Tach(List<SplitItemRequest> items) =>
+            _service.SplitTableAsync(new(_ban1.TableID, _ban2.TableID, items), _waiterId);
+        await Assert.ThrowsAsync<ValidationException>(() => Tach([new(first, 1), new(second, 2)])); // tách hết
+        await Assert.ThrowsAsync<ValidationException>(() => Tach([new(second, 3)]));
+        await Assert.ThrowsAsync<ValidationException>(() => Tach([new(second, 0)]));
+        await Assert.ThrowsAsync<ValidationException>(() => Tach([new(second, 1), new(second, 1)]));
+        await Assert.ThrowsAsync<ValidationException>(() => Tach([new(Guid.NewGuid(), 1)]));
+        await Assert.ThrowsAsync<ValidationException>(() => Tach([]));
+        await Assert.ThrowsAsync<ValidationException>(() => _service.SplitTableAsync(new(_ban2.TableID, _ban1.TableID, [new(first, 1)]), _waiterId));
+
+        Assert.Single(_repo.Orders);
+        Assert.Equal([1, 2], _repo.Orders[0].OrderDetails.Select(d => d.Quantity));
+        Assert.Equal(TableStatus.Empty, _ban2.Status);
+    }
+
+    [Fact]
+    public async Task Doi_trang_thai_mon_gui_kem_ten_mon_va_ban()
+    {
+        var (_, item, _) = await Ban1CoHaiMon();
+
+        await _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Preparing), byWaiter: false);
+
+        var c = Assert.Single(_notifier.Changes);
+        Assert.Equal(("Cà phê sữa", "Bàn 1"), (c.ProductName, c.TableName));
+    }
+
     private class FakeInventory : IInventoryService
     {
         public List<StockCheckItem> Checked { get; } = [];
@@ -304,11 +410,14 @@ public class OrderServiceTests
             Unavailable.Add(item);
             return Task.CompletedTask;
         }
+
+        public Task LowStockAlertAsync(LowStockAlertDto alert, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private class FakeOrders(List<Table> tables, List<Product> products) : IOrderRepository
     {
         public List<Order> Orders { get; } = [];
+        public List<Table> Tables => tables;
 
         public Task<List<Table>> GetTablesAsync(CancellationToken ct = default) => Task.FromResult(tables);
 
@@ -351,6 +460,12 @@ public class OrderServiceTests
         public Task<T> InOrderLockAsync<T>(Guid orderId, Func<Task<T>> work, CancellationToken ct = default)
         {
             LockedOrders.Add(orderId);
+            return work();
+        }
+
+        public Task<T> InOrdersLockAsync<T>(IEnumerable<Guid> orderIds, Func<Task<T>> work, CancellationToken ct = default)
+        {
+            LockedOrders.AddRange(orderIds);
             return work();
         }
 

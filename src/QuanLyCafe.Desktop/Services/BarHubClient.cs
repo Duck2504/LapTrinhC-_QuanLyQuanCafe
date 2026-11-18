@@ -9,6 +9,8 @@ public sealed class BarHubClient : IAsyncDisposable
 
     public event Action<BarTicketDto>? TicketCreated;
     public event Action<ItemStatusChangedDto>? ItemStatusChanged;
+    public event Action<ItemUnavailableDto>? ItemUnavailable;
+    public event Action<LowStockAlertDto>? LowStockAlert;
     public event Action<bool>? ConnectionChanged;
 
     public BarHubClient(string baseUrl, SessionStore session)
@@ -19,6 +21,8 @@ public sealed class BarHubClient : IAsyncDisposable
             .Build();
         _conn.On<BarTicketDto>("TicketCreated", t => TicketCreated?.Invoke(t));
         _conn.On<ItemStatusChangedDto>("ItemStatusChanged", c => ItemStatusChanged?.Invoke(c));
+        _conn.On<ItemUnavailableDto>("ItemUnavailable", u => ItemUnavailable?.Invoke(u));
+        _conn.On<LowStockAlertDto>("LowStockAlert", a => LowStockAlert?.Invoke(a));
         _conn.Reconnecting += _ => { ConnectionChanged?.Invoke(false); return Task.CompletedTask; };
         _conn.Reconnected += _ => { ConnectionChanged?.Invoke(true); return Task.CompletedTask; };
         _conn.Closed += _ => { ConnectionChanged?.Invoke(false); return Task.CompletedTask; };

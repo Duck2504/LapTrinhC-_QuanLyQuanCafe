@@ -26,5 +26,8 @@ public interface IOrderRepository
     void RemoveDetails(IEnumerable<OrderDetail> details);
 
     Task<T> InOrderLockAsync<T>(Guid orderId, Func<Task<T>> work, CancellationToken ct = default);
+
+    // Gộp/tách bàn sửa hai order cùng lúc: khóa cả hai trong một transaction.
+    Task<T> InOrdersLockAsync<T>(IEnumerable<Guid> orderIds, Func<Task<T>> work, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

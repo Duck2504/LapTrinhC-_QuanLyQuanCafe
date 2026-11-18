@@ -48,10 +48,14 @@ public class OrderRepository(AppDbContext db) : IOrderRepository
 
     public void RemoveDetails(IEnumerable<OrderDetail> details) => db.OrderDetails.RemoveRange(details);
 
-    public async Task<T> InOrderLockAsync<T>(Guid orderId, Func<Task<T>> work, CancellationToken ct = default)
+    public Task<T> InOrderLockAsync<T>(Guid orderId, Func<Task<T>> work, CancellationToken ct = default) =>
+        InOrdersLockAsync([orderId], work, ct);
+
+    public async Task<T> InOrdersLockAsync<T>(IEnumerable<Guid> orderIds, Func<Task<T>> work, CancellationToken ct = default)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"SELECT 1 FROM Orders WITH (UPDLOCK, ROWLOCK) WHERE OrderID = {orderId}", ct);
+        foreach (var orderId in orderIds.Distinct().Order()) // khóa theo thứ tự cố định để hai yêu cầu ngược chiều không deadlock
+            await db.Database.ExecuteSqlAsync($"SELECT 1 FROM Orders WITH (UPDLOCK, ROWLOCK) WHERE OrderID = {orderId}", ct);
         var result = await work();
         await tx.CommitAsync(ct);
         return result;

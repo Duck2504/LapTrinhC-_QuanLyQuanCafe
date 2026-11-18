@@ -15,6 +15,14 @@ public class OrdersController(OrderService orders) : ControllerBase
     [Authorize(Roles = "Manager,Cashier,Waiter")]
     public Task<List<TableDto>> GetTables(CancellationToken ct) => orders.GetTablesAsync(ct);
 
+    [HttpPost("tables/merge")]
+    [Authorize(Roles = "Cashier,Waiter")]
+    public Task<OrderDto> MergeTables(MergeTablesRequest req, CancellationToken ct) => orders.MergeTablesAsync(req, ct);
+
+    [HttpPost("tables/split")]
+    [Authorize(Roles = "Cashier,Waiter")]
+    public Task<OrderDto> SplitTable(SplitTableRequest req, CancellationToken ct) => orders.SplitTableAsync(req, CurrentUserId, ct);
+
     [HttpPost("orders")]
     [Authorize(Roles = "Cashier,Waiter")]
     public async Task<IActionResult> Create(CreateOrderRequest req, CancellationToken ct) =>
