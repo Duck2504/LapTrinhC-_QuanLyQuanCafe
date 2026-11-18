@@ -11,3 +11,9 @@ public record OrderDto(Guid Id, DateTime OrderDate, OrderType OrderType, OrderSt
 
 // BarHub "TicketCreated"
 public record BarTicketDto(Guid OrderId, string? TableName, DateTime OrderDate, List<OrderItemDto> Items);
+
+// PUT /api/order-items/{id}/status
+public record UpdateItemStatusRequest(OrderDetailStatus Status);
+
+// BarHub "ItemStatusChanged"
+public record ItemStatusChangedDto(Guid OrderDetailId, Guid OrderId, OrderDetailStatus Status);
