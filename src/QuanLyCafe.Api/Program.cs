@@ -5,7 +5,10 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using QuanLyCafe.Api.Auth;
+using QuanLyCafe.Api.Hubs;
 using QuanLyCafe.Api.Middleware;
+using QuanLyCafe.Application.Common;
+using QuanLyCafe.Application.Inventory;
 using QuanLyCafe.Application.Ordering;
 using QuanLyCafe.Application.Staff;
 using QuanLyCafe.Domain.Common;
@@ -41,6 +44,9 @@ builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
 // Ordering
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<OrderService>();
+builder.Services.AddScoped<IInventoryService, StubInventoryService>(); // AddCatalogAndInventory đăng ký sau sẽ ghi đè
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IRealtimeNotifier, BarHubNotifier>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
 {
@@ -55,6 +61,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     };
     o.Events = new JwtBearerEvents
     {
+        // WebSocket không gửi được header Authorization → BarHubClient gửi token qua ?access_token=.
+        OnMessageReceived = ctx =>
+        {
+            if (ctx.HttpContext.Request.Path.StartsWithSegments(BarHub.Path))
+                ctx.Token = ctx.Request.Query["access_token"];
+            return Task.CompletedTask;
+        },
         // Mục 4.3.4: tài khoản bị vô hiệu hóa hoặc bị đổi vai trò bị chặn ngay dù token còn hạn (đệm 30 giây).
         OnTokenValidated = async ctx =>
         {
@@ -142,6 +155,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<BarHub>(BarHub.Path, o => o.CloseOnAuthenticationExpiration = true); // token hết hạn → ngắt, client phải đăng nhập lại
 
 // Kiểm tra kết nối SQL Server (mục 4.5.4).
 app.MapGet("/health", async (AppDbContext db, CancellationToken ct) =>
