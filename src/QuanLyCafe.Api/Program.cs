@@ -8,7 +8,6 @@ using QuanLyCafe.Api.Auth;
 using QuanLyCafe.Api.Hubs;
 using QuanLyCafe.Api.Middleware;
 using QuanLyCafe.Application.Common;
-using QuanLyCafe.Application.Inventory;
 using QuanLyCafe.Application.Ordering;
 using QuanLyCafe.Application.Staff;
 using QuanLyCafe.Domain.Common;
@@ -44,7 +43,6 @@ builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
 // Ordering
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<OrderService>();
-builder.Services.AddScoped<IInventoryService, StubInventoryService>(); // AddCatalogAndInventory đăng ký sau sẽ ghi đè
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRealtimeNotifier, BarHubNotifier>();
 
