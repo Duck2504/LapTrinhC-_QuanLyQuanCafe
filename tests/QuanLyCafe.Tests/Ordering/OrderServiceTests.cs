@@ -1,3 +1,5 @@
+using QuanLyCafe.Application.Common;
+using QuanLyCafe.Application.Inventory;
 using QuanLyCafe.Application.Ordering;
 using QuanLyCafe.Domain.Catalog;
 using QuanLyCafe.Domain.Common;
@@ -17,8 +19,11 @@ public class OrderServiceTests
     public OrderServiceTests()
     {
         _repo = new FakeOrders([_ban1], [_cafeSua, _ngungBan]);
-        _service = new OrderService(_repo);
+        _service = new OrderService(_repo, _inventory, _notifier);
     }
+
+    private readonly FakeInventory _inventory = new();
+    private readonly FakeNotifier _notifier = new();
 
     private Task<OrderDto> MoBan1() => _service.CreateAsync(new CreateOrderRequest(OrderType.DineIn, _ban1.TableID), _waiterId);
 
@@ -101,6 +106,206 @@ public class OrderServiceTests
         await Assert.ThrowsAsync<NotFoundException>(() => _service.GetAsync(Guid.NewGuid()));
     }
 
+    [Fact]
+    public async Task Sua_mon_da_co_giu_nguyen_id_va_gia_da_chep()
+    {
+        var order = await MoBan1();
+        var first = Assert.Single((await _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, null)]))).Items);
+        _cafeSua.Price = 30000; // đổi giá sau khi đã gọi món
+
+        var dto = await _service.UpdateItemsAsync(order.Id,
+            new([new(_cafeSua.ProductID, 3, "ít đá", first.Id), new(_cafeSua.ProductID, 1, null)]));
+
+        var kept = Assert.Single(dto.Items, i => i.Id == first.Id); // phiếu Bar đã gửi không bị đổi ID
+        Assert.Equal((3, 25000m, "ít đá"), (kept.Quantity, kept.UnitPrice, kept.Note));
+        Assert.Equal(2, dto.Items.Count);
+        Assert.Equal(3 * 25000 + 30000, dto.TotalAmount);
+    }
+
+    [Fact]
+    public async Task Sua_mon_bar_da_bat_dau_lam_ERR_CON_001()
+    {
+        var order = await MoBan1();
+        var line = Assert.Single((await _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, null)]))).Items);
+        _repo.Orders[0].OrderDetails[0].Status = OrderDetailStatus.Preparing;
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+            _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 5, null, line.Id)])));
+        Assert.Equal(ErrorCodes.ConcurrencyConflict, ex.Code);
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, null, Guid.NewGuid())])));
+        Assert.Equal(1, _repo.Orders[0].OrderDetails[0].Quantity);
+    }
+
+    [Fact]
+    public async Task Gui_order_kiem_kho_mon_dang_cho_roi_phat_TicketCreated()
+    {
+        var order = await MoBan1();
+        await _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, "ít đá"), new(_cafeSua.ProductID, 2, null)]));
+        _repo.Orders[0].OrderDetails[0].Status = OrderDetailStatus.Preparing; // đã gửi lần trước, bar đang làm
+
+        await _service.SubmitAsync(order.Id);
+
+        Assert.Equal([new StockCheckItem(_cafeSua.ProductID, 2)], _inventory.Checked); // chỉ món còn Chờ, gộp theo sản phẩm
+        var ticket = Assert.Single(_notifier.Tickets);
+        Assert.Equal((order.Id, "Bàn 1"), (ticket.OrderId, ticket.TableName));
+        Assert.Equal(2, Assert.Single(ticket.Items).Quantity);
+    }
+
+    [Fact]
+    public async Task Gui_order_thieu_nguyen_lieu_khong_phat_phieu()
+    {
+        var order = await MoBan1();
+        await _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, null)]));
+        _inventory.Error = new BusinessRuleException(ErrorCodes.StockInsufficient, "Hết sữa");
+
+        var ex = await Assert.ThrowsAsync<BusinessRuleException>(() => _service.SubmitAsync(order.Id));
+        Assert.Equal(ErrorCodes.StockInsufficient, ex.Code);
+        Assert.Empty(_notifier.Tickets);
+    }
+
+    [Fact]
+    public async Task Gui_order_rong_hoac_da_thanh_toan_bi_chan()
+    {
+        var order = await MoBan1();
+        await Assert.ThrowsAsync<ValidationException>(() => _service.SubmitAsync(order.Id));
+
+        await _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, null)]));
+        _repo.Orders[0].Status = OrderStatus.Paid;
+        var ex = await Assert.ThrowsAsync<BusinessRuleException>(() => _service.SubmitAsync(order.Id));
+        Assert.Equal(ErrorCodes.OrderAlreadyPaid, ex.Code);
+        Assert.Empty(_notifier.Tickets);
+    }
+
+    // Bàn 1 có 2 món Cà phê sữa (đã gửi Bar), trả về Id 2 dòng.
+    private async Task<(Guid OrderId, Guid First, Guid Second)> Ban1CoHaiMon()
+    {
+        var order = await MoBan1();
+        var items = (await _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, null), new(_cafeSua.ProductID, 2, null)]))).Items;
+        return (order.Id, items[0].Id, items[1].Id);
+    }
+
+    [Fact]
+    public async Task Phieu_pha_che_chi_gom_mon_chua_giao_cua_order_dang_mo_theo_thu_tu_order()
+    {
+        var (ban1, item1, _) = await Ban1CoHaiMon();
+        _repo.Orders[0].OrderDate = DateTime.Now.AddMinutes(-5);
+        _repo.Orders[0].OrderDetails[0].Status = OrderDetailStatus.Delivered;
+        var mangDi = await _service.CreateAsync(new CreateOrderRequest(OrderType.Takeaway, null), _waiterId);
+        await _service.UpdateItemsAsync(mangDi.Id, new([new(_cafeSua.ProductID, 1, null)]));
+        var daTra = await _service.CreateAsync(new CreateOrderRequest(OrderType.Takeaway, null), _waiterId);
+        await _service.UpdateItemsAsync(daTra.Id, new([new(_cafeSua.ProductID, 1, null)]));
+        _repo.Orders[2].Status = OrderStatus.Paid;
+
+        var tickets = await _service.GetBarTicketsAsync();
+
+        Assert.Equal([ban1, mangDi.Id], tickets.Select(t => t.OrderId));
+        Assert.DoesNotContain(tickets[0].Items, i => i.Id == item1);
+        Assert.Null(tickets[1].TableName);
+    }
+
+    [Fact]
+    public async Task Pha_che_lam_xong_phuc_vu_giao_moi_buoc_phat_ItemStatusChanged()
+    {
+        var (orderId, item, _) = await Ban1CoHaiMon();
+
+        await _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Preparing), byWaiter: false);
+        await _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Done), byWaiter: false);
+        var dto = await _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Delivered), byWaiter: true);
+
+        Assert.Equal(OrderDetailStatus.Delivered, dto.Status);
+        Assert.Equal([OrderDetailStatus.Preparing, OrderDetailStatus.Done, OrderDetailStatus.Delivered], _notifier.Changes.Select(c => c.Status));
+        Assert.All(_notifier.Changes, c => Assert.Equal((item, orderId), (c.OrderDetailId, c.OrderId)));
+        Assert.Equal(1 + 3, _repo.LockedOrders.Count(id => id == orderId)); // PUT items + 3 lần đổi trạng thái đều khóa order
+    }
+
+    [Fact]
+    public async Task Doi_trang_thai_sai_vai_tro_hoac_nhay_buoc_bi_chan()
+    {
+        var (_, item, _) = await Ban1CoHaiMon();
+
+        await Assert.ThrowsAsync<ValidationException>(() => _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Delivered), byWaiter: false));
+        await Assert.ThrowsAsync<ValidationException>(() => _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Done), byWaiter: true));
+        await Assert.ThrowsAsync<ValidationException>(() => _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Pending), byWaiter: false));
+        // Chờ → Xong (bỏ qua Đang làm), hoặc hai pha chế cùng bấm Đang làm → người sau ERR-CON-001.
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Done), byWaiter: false));
+        Assert.Equal(ErrorCodes.ConcurrencyConflict, ex.Code);
+        await _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Preparing), byWaiter: false);
+        await Assert.ThrowsAsync<ConflictException>(() => _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Preparing), byWaiter: false));
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.UpdateItemStatusAsync(Guid.NewGuid(), new(OrderDetailStatus.Preparing), byWaiter: false));
+
+        Assert.Equal(OrderDetailStatus.Preparing, _repo.Orders[0].OrderDetails[0].Status);
+        Assert.Single(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task Doi_trang_thai_mon_cua_order_da_thanh_toan_ERR_ORDER_001()
+    {
+        var (_, item, _) = await Ban1CoHaiMon();
+        _repo.Orders[0].Status = OrderStatus.Paid;
+
+        var ex = await Assert.ThrowsAsync<BusinessRuleException>(() => _service.UpdateItemStatusAsync(item, new(OrderDetailStatus.Preparing), byWaiter: false));
+        Assert.Equal(ErrorCodes.OrderAlreadyPaid, ex.Code);
+        Assert.Empty(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task Bao_het_nguyen_lieu_phat_ItemUnavailable_khong_doi_du_lieu()
+    {
+        var (orderId, item1, item2) = await Ban1CoHaiMon();
+
+        await _service.ReportUnavailableAsync(item1);
+
+        var sent = Assert.Single(_notifier.Unavailable);
+        Assert.Equal((_cafeSua.ProductID, "Cà phê sữa", orderId, "Bàn 1"), (sent.ProductId, sent.ProductName, sent.OrderId, sent.TableName));
+        Assert.All(_repo.Orders[0].OrderDetails, d => Assert.Equal(OrderDetailStatus.Pending, d.Status));
+
+        await _service.UpdateItemStatusAsync(item2, new(OrderDetailStatus.Preparing), byWaiter: false);
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => _service.ReportUnavailableAsync(item2)); // đã bắt đầu làm
+        Assert.Equal(ErrorCodes.ConcurrencyConflict, ex.Code);
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.ReportUnavailableAsync(Guid.NewGuid()));
+        Assert.Single(_notifier.Unavailable);
+    }
+
+    private class FakeInventory : IInventoryService
+    {
+        public List<StockCheckItem> Checked { get; } = [];
+        public Exception? Error { get; set; }
+
+        public Task CheckStockAsync(IEnumerable<StockCheckItem> items, CancellationToken ct)
+        {
+            if (Error is not null) throw Error;
+            Checked.AddRange(items);
+            return Task.CompletedTask;
+        }
+    }
+
+    private class FakeNotifier : IRealtimeNotifier
+    {
+        public List<BarTicketDto> Tickets { get; } = [];
+
+        public Task TicketCreatedAsync(BarTicketDto ticket, CancellationToken ct = default)
+        {
+            Tickets.Add(ticket);
+            return Task.CompletedTask;
+        }
+
+        public List<ItemStatusChangedDto> Changes { get; } = [];
+        public List<ItemUnavailableDto> Unavailable { get; } = [];
+
+        public Task ItemStatusChangedAsync(ItemStatusChangedDto change, CancellationToken ct = default)
+        {
+            Changes.Add(change);
+            return Task.CompletedTask;
+        }
+
+        public Task ItemUnavailableAsync(ItemUnavailableDto item, CancellationToken ct = default)
+        {
+            Unavailable.Add(item);
+            return Task.CompletedTask;
+        }
+    }
+
     private class FakeOrders(List<Table> tables, List<Product> products) : IOrderRepository
     {
         public List<Order> Orders { get; } = [];
@@ -119,6 +324,12 @@ public class OrderServiceTests
 
         public Task<Order?> GetOrderAsync(Guid orderId, CancellationToken ct = default) =>
             Task.FromResult(Orders.FirstOrDefault(o => o.OrderID == orderId));
+
+        public Task<List<Order>> GetOpenOrdersAsync(CancellationToken ct = default) =>
+            Task.FromResult(Orders.Where(o => o.Status == OrderStatus.Open).ToList());
+
+        public Task<Guid?> GetOrderIdOfDetailAsync(Guid orderDetailId, CancellationToken ct = default) =>
+            Task.FromResult(Orders.SelectMany(o => o.OrderDetails).FirstOrDefault(d => d.OrderDetailID == orderDetailId)?.OrderID);
 
         public Task<List<Product>> GetProductsAsync(IEnumerable<Guid> productIds, CancellationToken ct = default) =>
             Task.FromResult(products.Where(p => productIds.Contains(p.ProductID)).ToList());
