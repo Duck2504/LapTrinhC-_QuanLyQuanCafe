@@ -42,7 +42,11 @@ public class frmMain : Form
                 using var form = new frmProducts(Program.Api);
                 form.ShowDialog(this);
             });                        // SCR_007
-            Add("Định lượng BOM", "frmBom");                       // SCR_008
+            _menu.Items.Add("Định lượng BOM", null, (_, _) =>
+            {
+                using var form = new frmBom(Program.Api);
+                form.ShowDialog(this);
+            });                       // SCR_008
             Add("Kho", "frmInventory");                            // SCR_009
             Add("Nhân viên", "frmStaff");                          // SCR_010
             Add("Báo cáo", "frmReport");                           // SCR_011
