@@ -10,14 +10,15 @@ static class Program
     /// </summary>
     public static SessionStore Session { get; } = new();
     public static ApiClient Api { get; private set; } = null!;
+    public const string BaseUrl = "https://localhost:7027/";
     [STAThread]
     static void Main()
     {
         // To customize application configuration such as set high DPI settings or default font,
         // see https://aka.ms/applicationconfiguration.
-        Api = new ApiClient(Session, "https://localhost:7027/");
+        Api = new ApiClient(Session, BaseUrl);
         ApplicationConfiguration.Initialize();
-        IAuthApi auth = new FakeAuthApi();
+        IAuthApi auth = new ApiAuthApi(Api); // token thật: frmPOS/BarHub cần JWT, FakeAuthApi trả "fake-token" sẽ bị 401
 
         while (true)
         {
