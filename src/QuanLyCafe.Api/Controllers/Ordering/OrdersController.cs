@@ -28,4 +28,8 @@ public class OrdersController(OrderService orders) : ControllerBase
     [Authorize(Roles = "Cashier,Waiter")]
     public Task<OrderDto> UpdateItems(Guid id, UpdateOrderItemsRequest req, CancellationToken ct) =>
         orders.UpdateItemsAsync(id, req, ct);
+
+    [HttpPost("orders/{id:guid}/submit")]
+    [Authorize(Roles = "Cashier,Waiter")]
+    public Task<OrderDto> Submit(Guid id, CancellationToken ct) => orders.SubmitAsync(id, ct);
 }
