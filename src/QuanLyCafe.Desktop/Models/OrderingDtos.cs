@@ -16,4 +16,10 @@ public record BarTicketDto(Guid OrderId, string? TableName, DateTime OrderDate, 
 public record UpdateItemStatusRequest(OrderDetailStatus Status);
 
 // BarHub "ItemStatusChanged"
-public record ItemStatusChangedDto(Guid OrderDetailId, Guid OrderId, OrderDetailStatus Status);
+public record ItemStatusChangedDto(Guid OrderDetailId, Guid OrderId, OrderDetailStatus Status, string ProductName, string? TableName);
+
+// BarHub "ItemUnavailable"
+public record ItemUnavailableDto(Guid ProductId, string ProductName, Guid OrderId, string? TableName);
+
+// BarHub "LowStockAlert" (Manager)
+public record LowStockAlertDto(Guid MaterialId, string MaterialName, decimal StockQuantity);

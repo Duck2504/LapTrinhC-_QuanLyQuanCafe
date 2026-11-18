@@ -2,6 +2,7 @@
 using QuanLyCafe.Desktop.Forms.Catalog;
 using QuanLyCafe.Desktop.Forms.Ordering;
 using QuanLyCafe.Desktop.Forms.Staff;
+using QuanLyCafe.Desktop.Models;
 using QuanLyCafe.Desktop.Services;
 
 namespace QuanLyCafe.Desktop.Forms;
@@ -11,6 +12,8 @@ public class frmMain : Form
     private readonly IAuthApi _auth;
     private readonly MenuStrip _menu = new();
     private readonly Label _hello = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 16) };
+    private readonly Label _lowStock = new() { Dock = DockStyle.Bottom, Height = 36, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Segoe UI", 11, FontStyle.Bold) };
+    private readonly Dictionary<Guid, LowStockAlertDto> _lowItems = [];
 
     public bool LoggedOut { get; private set; }   // true = quay về form đăng nhập
 
@@ -21,9 +24,35 @@ public class frmMain : Form
         WindowState = FormWindowState.Maximized;
         _hello.Text = $"Xin chào, {Program.Session.FullName} ({Program.Session.Role})";
         Controls.Add(_hello);
+        Controls.Add(_lowStock);
         Controls.Add(_menu);
         MainMenuStrip = _menu;
         BuildMenu(Program.Session.Role);
+        if (Program.Session.Role == "Manager") ListenLowStock();
+    }
+
+    // LowStockAlert (BarHub → nhóm Manager): hiện danh sách nguyên liệu dưới mức tối thiểu ở chân màn hình.
+    private void ListenLowStock()
+    {
+        var hub = new BarHubClient(Program.BaseUrl, Program.Session);
+        hub.LowStockAlert += a =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try { BeginInvoke(() => ShowLowStock(a)); } catch (InvalidOperationException) { }
+        };
+        Shown += async (_, _) =>
+        {
+            try { await hub.StartAsync(); }
+            catch (Exception) { _lowStock.Text = "Không kết nối được kênh cảnh báo tồn kho."; }
+        };
+        FormClosed += async (_, _) => await hub.DisposeAsync();
+    }
+
+    private void ShowLowStock(LowStockAlertDto a)
+    {
+        _lowItems[a.MaterialId] = a;
+        _lowStock.Text = "⚠ Dưới mức tối thiểu: " + string.Join(", ", _lowItems.Values.Select(x => $"{x.MaterialName} (còn {x.StockQuantity:0.###})"));
+        System.Media.SystemSounds.Exclamation.Play();
     }
 
     private void BuildMenu(string role)
