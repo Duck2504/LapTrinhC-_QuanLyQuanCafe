@@ -21,5 +21,12 @@ public record BarTicketDto(Guid OrderId, string? TableName, DateTime OrderDate, 
 
 public record UpdateItemStatusRequest(OrderDetailStatus Status);
 
-public record ItemStatusChangedDto(Guid OrderDetailId, Guid OrderId, OrderDetailStatus Status);
+public record ItemStatusChangedDto(Guid OrderDetailId, Guid OrderId, OrderDetailStatus Status, string ProductName, string? TableName);
 public record ItemUnavailableDto(Guid ProductId, string ProductName, Guid OrderId, string? TableName);
+
+// POST /api/tables/merge: chuyển toàn bộ món bàn nguồn sang bàn đích (cả hai đang có order).
+public record MergeTablesRequest(Guid SourceTableId, Guid TargetTableId);
+
+// POST /api/tables/split: chuyển một phần món (theo số lượng) từ bàn nguồn sang bàn đích.
+public record SplitItemRequest(Guid OrderItemId, int Quantity);
+public record SplitTableRequest(Guid SourceTableId, Guid TargetTableId, List<SplitItemRequest>? Items);
