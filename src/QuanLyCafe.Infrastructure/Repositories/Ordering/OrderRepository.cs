@@ -24,6 +24,7 @@ public class OrderRepository(AppDbContext db) : IOrderRepository
 
     public Task<Order?> GetOrderAsync(Guid orderId, CancellationToken ct = default) =>
         db.Orders.Include(o => o.Table)
+            .Include(o => o.Cashier)
             .Include(o => o.OrderDetails).ThenInclude(d => d.Product)
             .FirstOrDefaultAsync(o => o.OrderID == orderId, ct);
 

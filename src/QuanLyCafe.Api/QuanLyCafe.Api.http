@@ -88,10 +88,20 @@ Content-Type: application/json
 { "materialId": "{{materialId}}", "actualQuantity": 50, "note": "Kiểm kê cuối ca" }
 
 ### Thanh toán tiền mặt — dùng token Cashier hoặc Manager và orderId của đơn đang mở có món đã thiết lập BOM.
-# Thử tiền thiếu trước, rồi sửa cashGiven thành số đủ và gửi lại. Gửi lại sau khi thành công để kiểm tra không trừ kho lần hai.
+# Thử tiền thiếu trước, rồi sửa cashGiven thành số đủ và gửi lại. Gửi lại với cashGiven khác để kiểm tra tiền thối gốc và số phiếu kho.
 
 POST {{QuanLyCafe.Api_HostAddress}}/api/payments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "orderId": "{{orderId}}", "method": 1, "cashGiven": 100000 }
+
+### Thanh toán điện tử giả lập — MoMo = 2, VNPay = 3, Thẻ = 4.
+# Dùng đơn đang mở. Khởi động API với PaymentGateway__Mode = Success, Declined hoặc Timeout.
+# Declined và Timeout phải trả 502 / ERR-PAY-001. Timeout mất khoảng 15 giây.
+
+POST {{QuanLyCafe.Api_HostAddress}}/api/payments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "orderId": "{{orderId}}", "method": 2 }

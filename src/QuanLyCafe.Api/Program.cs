@@ -14,6 +14,7 @@ using QuanLyCafe.Application.Staff;
 using QuanLyCafe.Domain.Common;
 using QuanLyCafe.Domain.Ordering;
 using QuanLyCafe.Domain.Staff;
+using QuanLyCafe.Infrastructure.PaymentGateway;
 using QuanLyCafe.Infrastructure.Persistence;
 using QuanLyCafe.Infrastructure.Repositories.Ordering;
 using QuanLyCafe.Infrastructure.Repositories.Payment;
@@ -51,6 +52,8 @@ builder.Services.AddSingleton<IRealtimeNotifier, BarHubNotifier>();
 // Payment
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<PaymentService>();
+builder.Services.AddSingleton<IPaymentGateway>(_ =>
+    new MockPaymentGateway(builder.Configuration["PaymentGateway:Mode"] ?? "Success"));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
 {

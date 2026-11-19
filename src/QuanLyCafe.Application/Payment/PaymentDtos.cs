@@ -16,4 +16,4 @@ public record InvoiceDto(
     decimal TotalAmount, string? CashierName,
     List<InvoiceLineDto> Lines);
 
-public record PaymentResultDto(InvoiceDto Invoice, decimal Change);
+public record PaymentResultDto(InvoiceDto Invoice, decimal? Change);

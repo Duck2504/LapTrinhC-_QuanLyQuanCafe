@@ -16,4 +16,4 @@ public record InvoiceDto(
     List<InvoiceLineDto> Lines);
 
 // Kết quả POST /api/payments
-public record PaymentResultDto(InvoiceDto Invoice, decimal Change);
+public record PaymentResultDto(InvoiceDto Invoice, decimal? Change);
