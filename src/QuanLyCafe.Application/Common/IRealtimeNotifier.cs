@@ -8,4 +8,8 @@ public interface IRealtimeNotifier
     Task ItemStatusChangedAsync(ItemStatusChangedDto change, CancellationToken ct = default);
 
     Task ItemUnavailableAsync(ItemUnavailableDto item, CancellationToken ct = default);
+
+    Task LowStockAlertAsync(LowStockAlertDto alert, CancellationToken ct = default);
 }
+
+public record LowStockAlertDto(Guid MaterialId, string MaterialName, decimal StockQuantity);
