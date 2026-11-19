@@ -14,7 +14,8 @@ public static class CatalogAndInventoryRegistration
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IMaterialRepository, MaterialRepository>();
         services.AddScoped<CatalogService>();
-        services.AddScoped<IInventoryService, InventoryService>();
+        services.AddScoped<InventoryService>();
+        services.AddScoped<IInventoryService>(sp => sp.GetRequiredService<InventoryService>());
         services.AddScoped<IStockMovementRepository, StockMovementRepository>();
         services.AddScoped<StockService>();
 
