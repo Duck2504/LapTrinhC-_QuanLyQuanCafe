@@ -13,6 +13,18 @@ public class PaymentService(
     IPaymentRepository payments,
     IPaymentGateway gateway)
 {
+    public async Task<InvoiceDto> GetInvoiceAsync(Guid orderId, CancellationToken ct)
+    {
+        var order = await orders.GetOrderAsync(orderId, ct)
+            ?? throw new NotFoundException("Không tìm thấy đơn.");
+
+        if (order.Status != OrderStatus.Paid)
+            throw new BusinessRuleException(
+                ErrorCodes.ValidationFailed, "Đơn chưa được thanh toán.");
+
+        return GetExistingResult(order).Invoice;
+    }
+
     public async Task<PaymentResultDto> PayAsync(
         PaymentRequest request, Guid cashierId, string? cashierName,
         CancellationToken ct)

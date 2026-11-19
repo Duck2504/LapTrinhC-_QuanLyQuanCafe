@@ -2,6 +2,7 @@
 using QuanLyCafe.Desktop.Forms.Catalog;
 using QuanLyCafe.Desktop.Forms.Inventory;
 using QuanLyCafe.Desktop.Forms.Ordering;
+using QuanLyCafe.Desktop.Forms.Payment;
 using QuanLyCafe.Desktop.Forms.Staff;
 using QuanLyCafe.Desktop.Models;
 using QuanLyCafe.Desktop.Services;
@@ -64,7 +65,7 @@ public class frmMain : Form
         if (manager || cashier || waiter)
             Add("Gọi món", "frmPOS", () => new frmPOS());          // SCR_004
         if (manager || cashier)
-            Add("Thanh toán", "frmPayment");                       // SCR_005
+            Add("Thanh toán", "frmPayment", () => new frmPayment(Program.Api)); // SCR_005
         if (manager || barista)
             Add("Điều phối pha chế", "frmBar", () => new frmBar()); // SCR_006
         if (manager)

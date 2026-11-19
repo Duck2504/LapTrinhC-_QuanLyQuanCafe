@@ -105,3 +105,13 @@ Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "orderId": "{{orderId}}", "method": 2 }
+
+### Đơn đang mở có món, gồm cả đơn mang đi
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/orders/open
+Authorization: Bearer {{token}}
+
+### Xem lại hóa đơn (đã thanh toán: 200, chưa thanh toán: 422)
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/orders/{{orderId}}/invoice
+Authorization: Bearer {{token}}
