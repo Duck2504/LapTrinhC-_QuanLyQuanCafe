@@ -169,6 +169,9 @@ namespace QuanLyCafe.Infrastructure.Persistence.Migrations
                     b.Property<int?>("PaymentMethod")
                         .HasColumnType("int");
 
+                    b.Property<string>("PaymentResultJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 

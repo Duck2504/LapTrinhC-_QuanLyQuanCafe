@@ -9,6 +9,13 @@ namespace QuanLyCafe.Infrastructure.Repositories.Payment;
 public class PaymentRepository(AppDbContext db, IOrderRepository orders)
     : IPaymentRepository
 {
+    public Task<PaymentPreview?> GetPaymentPreviewAsync(Guid orderId, CancellationToken ct) =>
+        db.Orders.AsNoTracking()
+            .Where(order => order.OrderID == orderId)
+            .Select(order => new PaymentPreview(
+                order.Status, order.TotalAmount, order.OrderDetails.Any()))
+            .SingleOrDefaultAsync(ct);
+
     public async Task<T> RunAsync<T>(
         Guid orderId, Func<Task<T>> work, CancellationToken ct)
     {

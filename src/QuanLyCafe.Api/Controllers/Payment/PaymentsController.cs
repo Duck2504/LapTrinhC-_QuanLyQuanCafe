@@ -14,6 +14,6 @@ public class PaymentsController(PaymentService payments) : ControllerBase
     public Task<PaymentResultDto> Pay(PaymentRequest request, CancellationToken ct)
     {
         var cashierId = Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
-        return payments.PayCashAsync(request, cashierId, User.Identity?.Name, ct);
+        return payments.PayAsync(request, cashierId, User.Identity?.Name, ct);
     }
 }

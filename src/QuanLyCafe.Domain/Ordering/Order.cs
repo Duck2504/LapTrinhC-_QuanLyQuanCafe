@@ -13,6 +13,7 @@ public class Order
     public decimal TotalAmount { get; set; }
     public PaymentMethod? PaymentMethod { get; set; }
     public DateTime? PaidAt { get; set; }
+    public string? PaymentResultJson { get; set; }
 
     public Guid? TableID { get; set; }
     public Table? Table { get; set; }
