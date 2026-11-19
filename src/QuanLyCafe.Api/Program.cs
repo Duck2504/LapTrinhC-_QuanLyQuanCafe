@@ -9,12 +9,14 @@ using QuanLyCafe.Api.Hubs;
 using QuanLyCafe.Api.Middleware;
 using QuanLyCafe.Application.Common;
 using QuanLyCafe.Application.Ordering;
+using QuanLyCafe.Application.Payment;
 using QuanLyCafe.Application.Staff;
 using QuanLyCafe.Domain.Common;
 using QuanLyCafe.Domain.Ordering;
 using QuanLyCafe.Domain.Staff;
 using QuanLyCafe.Infrastructure.Persistence;
 using QuanLyCafe.Infrastructure.Repositories.Ordering;
+using QuanLyCafe.Infrastructure.Repositories.Payment;
 using QuanLyCafe.Infrastructure.Repositories.Staff;
 using Serilog;
 
@@ -45,6 +47,10 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IRealtimeNotifier, BarHubNotifier>();
+
+// Payment
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<PaymentService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
 {

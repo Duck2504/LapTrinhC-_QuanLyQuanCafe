@@ -11,6 +11,35 @@ public class InventoryService(
         IEnumerable<StockCheckItem> items,
         CancellationToken ct)
     {
+        var needed = await GetRequiredMaterialsAsync(items, ct);
+
+        if (needed.Count == 0)
+            return;
+
+        var stock = await materials.GetByIdsAsync(needed.Keys, ct);
+
+        foreach (var (materialId, required) in needed)
+        {
+            if (!stock.TryGetValue(materialId, out var material))
+            {
+                throw new BusinessRuleException(
+                    ErrorCodes.StockInsufficient,
+                    $"Không tìm thấy tồn kho của nguyên liệu {materialId}.");
+            }
+
+            if (material.StockQuantity < required)
+            {
+                throw new BusinessRuleException(
+                    ErrorCodes.StockInsufficient,
+                    $"Thiếu {material.MaterialName}: cần {required} {material.Unit}, "
+                    + $"hiện có {material.StockQuantity} {material.Unit}.");
+            }
+        }
+    }
+
+    internal async Task<Dictionary<Guid, decimal>> GetRequiredMaterialsAsync(
+        IEnumerable<StockCheckItem> items, CancellationToken ct)
+    {
         var needed = new Dictionary<Guid, decimal>();
 
         foreach (var group in items.GroupBy(item => item.ProductId))
@@ -36,27 +65,6 @@ public class InventoryService(
             }
         }
 
-        if (needed.Count == 0)
-            return;
-
-        var stock = await materials.GetByIdsAsync(needed.Keys, ct);
-
-        foreach (var (materialId, required) in needed)
-        {
-            if (!stock.TryGetValue(materialId, out var material))
-            {
-                throw new BusinessRuleException(
-                    ErrorCodes.StockInsufficient,
-                    $"Không tìm thấy tồn kho của nguyên liệu {materialId}.");
-            }
-
-            if (material.StockQuantity < required)
-            {
-                throw new BusinessRuleException(
-                    ErrorCodes.StockInsufficient,
-                    $"Thiếu {material.MaterialName}: cần {required} {material.Unit}, "
-                    + $"hiện có {material.StockQuantity} {material.Unit}.");
-            }
-        }
+        return needed;
     }
 }

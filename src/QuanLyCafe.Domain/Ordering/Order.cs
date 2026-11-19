@@ -31,4 +31,13 @@ public class Order
         if (Status != OrderStatus.Open)
             throw new BusinessRuleException(ErrorCodes.OrderAlreadyPaid, "Order đã thanh toán hoặc đã hủy, không thể sửa.");
     }
+
+    public void MarkPaid(PaymentMethod method, Guid cashierId, DateTime paidAt)
+    {
+        EnsureEditable();
+        Status = OrderStatus.Paid;
+        PaymentMethod = method;
+        CashierID = cashierId;
+        PaidAt = paidAt;
+    }
 }
