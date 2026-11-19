@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using QuanLyCafe.Api.Auth;
@@ -10,6 +11,7 @@ using QuanLyCafe.Api.Middleware;
 using QuanLyCafe.Application.Common;
 using QuanLyCafe.Application.Ordering;
 using QuanLyCafe.Application.Payment;
+using QuanLyCafe.Application.Reporting;
 using QuanLyCafe.Application.Staff;
 using QuanLyCafe.Domain.Common;
 using QuanLyCafe.Domain.Ordering;
@@ -18,6 +20,7 @@ using QuanLyCafe.Infrastructure.PaymentGateway;
 using QuanLyCafe.Infrastructure.Persistence;
 using QuanLyCafe.Infrastructure.Repositories.Ordering;
 using QuanLyCafe.Infrastructure.Repositories.Payment;
+using QuanLyCafe.Infrastructure.Repositories.Reporting;
 using QuanLyCafe.Infrastructure.Repositories.Staff;
 using Serilog;
 
@@ -124,6 +127,13 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
 builder.Services.AddCatalogAndInventory();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
+builder.Services.AddScoped<ReportService>();
+builder.Services.AddOptions<ReportShiftOptions>()
+    .Bind(builder.Configuration.GetRequiredSection("Reporting:Shifts"))
+    .Validate(shifts => shifts.HasOrderedStarts(), "Giờ bắt đầu ca phải theo thứ tự Sáng, Chiều, Tối.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<ReportShiftOptions>>().Value);
 
 var app = builder.Build();
 
