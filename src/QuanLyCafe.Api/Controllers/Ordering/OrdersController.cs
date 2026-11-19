@@ -2,12 +2,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.JsonWebTokens;
 using QuanLyCafe.Application.Ordering;
+using QuanLyCafe.Application.Payment;
 
 namespace QuanLyCafe.Api.Controllers.Ordering;
 
 [ApiController]
 [Route("api")]
-public class OrdersController(OrderService orders) : ControllerBase
+public class OrdersController(OrderService orders, PaymentService payments) : ControllerBase
 {
     private Guid CurrentUserId => Guid.Parse(User.FindFirst(JwtRegisteredClaimNames.Sub)!.Value);
 
@@ -31,6 +32,15 @@ public class OrdersController(OrderService orders) : ControllerBase
     [HttpGet("orders/{id:guid}")]
     [Authorize(Roles = "Manager,Cashier,Waiter")]
     public Task<OrderDto> Get(Guid id, CancellationToken ct) => orders.GetAsync(id, ct);
+
+    [HttpGet("orders/open")]
+    [Authorize(Roles = "Manager,Cashier")]
+    public Task<List<OrderDto>> GetOpenOrders(CancellationToken ct) => orders.GetOpenOrdersAsync(ct);
+
+    [HttpGet("orders/{id:guid}/invoice")]
+    [Authorize(Roles = "Manager,Cashier")]
+    public Task<InvoiceDto> GetInvoice(Guid id, CancellationToken ct) =>
+        payments.GetInvoiceAsync(id, ct);
 
     [HttpPut("orders/{id:guid}/items")]
     [Authorize(Roles = "Cashier,Waiter")]

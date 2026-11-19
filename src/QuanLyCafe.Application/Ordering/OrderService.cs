@@ -50,6 +50,13 @@ public class OrderService(IOrderRepository orders, IInventoryService inventory, 
 
     public async Task<OrderDto> GetAsync(Guid id, CancellationToken ct = default) => ToDto(await GetOrderAsync(id, ct));
 
+    public async Task<List<OrderDto>> GetOpenOrdersAsync(CancellationToken ct) =>
+        (await orders.GetOpenOrdersAsync(ct))
+            .Where(order => order.OrderDetails.Count > 0)
+            .OrderBy(order => order.OrderDate)
+            .Select(ToDto)
+            .ToList();
+
     // Khóa dòng order: hai người sửa cùng lúc hoặc sửa đúng lúc thanh toán không ghi đè TotalAmount/trạng thái.
     public Task<OrderDto> UpdateItemsAsync(Guid id, UpdateOrderItemsRequest req, CancellationToken ct = default) =>
         orders.InOrderLockAsync(id, () => UpdateItemsLockedAsync(id, req, ct), ct);
