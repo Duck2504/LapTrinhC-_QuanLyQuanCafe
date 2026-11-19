@@ -137,6 +137,16 @@ dotnet run --project src/QuanLyCafe.Api
 
 Lần chạy đầu tự tạo 4 vai trò và tài khoản `manager`. Kiểm tra: `GET http://localhost:5254/health` → `{"status":"Healthy"}`. Request mẫu có trong [`QuanLyCafe.Api.http`](src/QuanLyCafe.Api/QuanLyCafe.Api.http).
 
+Dữ liệu demo (10 bàn, 15 món, 12 nguyên liệu, BOM — chạy lại không bị trùng) và sao lưu DB:
+
+```bash
+sqlcmd -S localhost -E -C -d QuanLyCafe -f 65001 -i scripts/seed-demo.sql
+```
+
+```bash
+sqlcmd -S localhost -E -C -i scripts/backup.sql
+```
+
 **3. Chạy ứng dụng Desktop** (Windows):
 
 ```bash
