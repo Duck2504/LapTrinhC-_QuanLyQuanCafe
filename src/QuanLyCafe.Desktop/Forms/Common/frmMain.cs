@@ -3,6 +3,7 @@ using QuanLyCafe.Desktop.Forms.Catalog;
 using QuanLyCafe.Desktop.Forms.Inventory;
 using QuanLyCafe.Desktop.Forms.Ordering;
 using QuanLyCafe.Desktop.Forms.Payment;
+using QuanLyCafe.Desktop.Forms.Reporting;
 using QuanLyCafe.Desktop.Forms.Staff;
 using QuanLyCafe.Desktop.Models;
 using QuanLyCafe.Desktop.Services;
@@ -82,7 +83,7 @@ public class frmMain : Form
             });                       // SCR_008
             Add("Kho", "frmInventory", () => new frmInventory(Program.Api)); // SCR_009                            // SCR_009
             Add("Nhân viên", "frmStaff", () => new frmStaff());    // SCR_010
-            Add("Báo cáo", "frmReport");                           // SCR_011
+            Add("Báo cáo", "frmReport", () => new frmReport(Program.Api)); // SCR_011
         }
 
         var account = new ToolStripMenuItem("Tài khoản");
