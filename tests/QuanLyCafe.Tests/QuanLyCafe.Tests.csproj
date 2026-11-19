@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\QuanLyCafe.Application\QuanLyCafe.Application.csproj" />
     <ProjectReference Include="..\..\src\QuanLyCafe.Domain\QuanLyCafe.Domain.csproj" />
+    <ProjectReference Include="..\..\src\QuanLyCafe.Infrastructure\QuanLyCafe.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
