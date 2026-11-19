@@ -29,4 +29,9 @@ public class StockController(StockService stock) : ControllerBase
     public Task<PagedResult<StockMovementDto>> GetMovements(
         CancellationToken ct, int page = 1, int pageSize = 20) =>
         stock.GetMovementsAsync(page, pageSize, ct);
+    
+    [HttpPost("stocktakes")]
+    public Task<StocktakeResultDto> Stocktake(
+        StocktakeRequest request, CancellationToken ct) =>
+        stock.StocktakeAsync(request, CurrentUserId, ct);
 }

@@ -15,3 +15,10 @@ public record StockMovementDto(
 
 public record PagedResult<T>(
     List<T> Items, int Page, int PageSize, int TotalCount);
+
+public record StocktakeRequest(
+    Guid MaterialId, decimal? ActualQuantity, string? Note);
+
+public record StocktakeResultDto(
+    Guid MaterialId, decimal SystemQuantity, decimal ActualQuantity,
+    decimal Difference);

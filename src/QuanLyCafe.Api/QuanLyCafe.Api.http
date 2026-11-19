@@ -80,3 +80,9 @@ GET {{QuanLyCafe.Api_HostAddress}}/api/stock/movements?page=1&pageSize=1
 Authorization: Bearer {{token}}
 
 ###
+
+POST {{QuanLyCafe.Api_HostAddress}}/api/stock/stocktakes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "materialId": "{{materialId}}", "actualQuantity": 50, "note": "Kiểm kê cuối ca" }
