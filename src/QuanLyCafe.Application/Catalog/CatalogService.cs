@@ -32,12 +32,15 @@ public class CatalogService(
         Validate(req);
         var p = await repo.GetByIdAsync(id, ct)
                 ?? throw new NotFoundException("Không tìm thấy sản phẩm");
-        if (p.Price != req.Price)
-            log.LogInformation("Đổi giá {Product}: {Old} -> {New}", p.ProductName, p.Price, req.Price);
+        var oldPrice = p.Price;
         p.ProductName = req.ProductName.Trim();
         p.Price = req.Price;
         p.IsActive = req.IsActive;          // "Xoá" trên form = IsActive=false
         await repo.SaveChangesAsync(ct);
+        if (oldPrice != p.Price)
+            log.LogInformation("Đổi giá sản phẩm {ProductId} ({ProductName}): {OldPrice} -> {NewPrice}",
+                p.ProductID, p.ProductName, oldPrice, p.Price);
+
         return ToDto(p);
     }
     private static void Validate(SaveProductRequest r)
@@ -105,6 +108,8 @@ public class CatalogService(
 
         // Dòng cũ vắng trong request mới thì xóa.
         var currentLines = product.ProductBOMs.ToDictionary(line => line.MaterialID);
+        var oldQuantities = product.ProductBOMs
+            .ToDictionary(line => line.MaterialID, line => line.QuantityRequired);
         var removedLines = currentLines.Values
             .Where(line => !quantities.ContainsKey(line.MaterialID))
             .ToList();
@@ -130,6 +135,16 @@ public class CatalogService(
         }
 
         await repo.SaveChangesAsync(ct);
+
+        foreach (var materialId in oldQuantities.Keys.Union(quantities.Keys))
+        {
+            decimal? oldQuantity = oldQuantities.TryGetValue(materialId, out var oldValue) ? oldValue : null;
+            decimal? newQuantity = quantities.TryGetValue(materialId, out var newValue) ? newValue : null;
+            if (oldQuantity != newQuantity)
+                log.LogInformation(
+                    "Đổi BOM sản phẩm {ProductId} ({ProductName}), nguyên liệu {MaterialId}: {OldQuantity} -> {NewQuantity}",
+                    product.ProductID, product.ProductName, materialId, oldQuantity, newQuantity);
+        }
     }
 
     public async Task<List<BomLineDto>> GetBomAsync(

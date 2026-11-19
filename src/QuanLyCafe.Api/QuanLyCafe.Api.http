@@ -115,3 +115,31 @@ Authorization: Bearer {{token}}
 
 GET {{QuanLyCafe.Api_HostAddress}}/api/orders/{{orderId}}/invoice
 Authorization: Bearer {{token}}
+
+### Báo cáo — dùng token Manager. Chọn khoảng ngày có hóa đơn và phiếu hao hụt.
+
+@reportFrom = 2026-11-01
+@reportTo = 2026-11-30
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/reports/revenue?from={{reportFrom}}&to={{reportTo}}&groupBy=day
+Authorization: Bearer {{token}}
+
+###
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/reports/revenue?from={{reportFrom}}&to={{reportTo}}&groupBy=month
+Authorization: Bearer {{token}}
+
+###
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/reports/revenue?from={{reportFrom}}&to={{reportTo}}&groupBy=shift
+Authorization: Bearer {{token}}
+
+###
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/reports/top-products?from={{reportFrom}}&to={{reportTo}}
+Authorization: Bearer {{token}}
+
+###
+
+GET {{QuanLyCafe.Api_HostAddress}}/api/reports/inventory?from={{reportFrom}}&to={{reportTo}}
+Authorization: Bearer {{token}}
