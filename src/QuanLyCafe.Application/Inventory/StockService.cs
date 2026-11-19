@@ -76,4 +76,45 @@ public class StockService(
         await movements.SaveMovementAsync(movement, ct);
         return new(movement.MovementID, movement.UserID, newStock);
     }
+
+    public async Task<StocktakeResultDto> StocktakeAsync(
+    StocktakeRequest request, Guid userId, CancellationToken ct)
+    {
+        var note = request.Note?.Trim();
+
+        if (request.MaterialId == Guid.Empty ||
+            request.ActualQuantity is not decimal actualQuantity ||
+            actualQuantity < 0 ||
+            actualQuantity > MaxStockQuantity ||
+            decimal.Round(actualQuantity, 3) != actualQuantity ||
+            note?.Length > 200)
+        {
+            throw new ValidationException(
+                ErrorCodes.ValidationFailed,
+                "Chọn nguyên liệu và nhập tồn thực tế từ 0, tối đa 3 chữ số thập phân. "
+                + "Ghi chú tối đa 200 ký tự.");
+        }
+
+        var material = await materials.GetAsync(request.MaterialId, ct)
+            ?? throw new NotFoundException("Không tìm thấy nguyên liệu.");
+
+        var systemQuantity = material.StockQuantity;
+        var difference = actualQuantity - systemQuantity;
+
+        if (difference < 0)
+        {
+            material.StockQuantity = actualQuantity;
+
+            await movements.SaveMovementAsync(new StockMovement
+            {
+                MaterialID = material.MaterialID,
+                UserID = userId,
+                MovementType = MovementType.Shrinkage,
+                Quantity = -difference,
+                Note = note
+            }, ct);
+        }
+
+        return new(material.MaterialID, systemQuantity, actualQuantity, difference);
+    }
 }
