@@ -8,6 +8,8 @@ public class frmProducts : Form
 {
     private readonly ApiClient _api;
     private readonly BindingList<ProductDto> _items = new();
+    private List<ProductDto> _all = [];
+    private readonly TextBox txtSearch = new() { Dock = DockStyle.Top, PlaceholderText = "Tìm sản phẩm..." };
     private Guid? _editingId;   // null = chế độ "tạo"
 
     private readonly DataGridView dgvProducts = new();
@@ -27,8 +29,10 @@ public class frmProducts : Form
     private void BuildUi()
     {
         Text = "Quản lý sản phẩm";
+        Theme.Apply(this);
+        Theme.Shortcuts(this, btnRefresh);
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(640, 480);
+        ClientSize = new Size(640, 512);
 
         // Grid
         dgvProducts.Dock = DockStyle.Top;
@@ -51,12 +55,12 @@ public class frmProducts : Form
         dgvProducts.CellFormatting   += dgvProducts_CellFormatting;
 
         // Ô nhập
-        var lblName = new Label { Text = "Tên:", Left = 12, Top = 318, AutoSize = true };
-        txtName.SetBounds(90, 314, 300, 25);
+        var lblName = new Label { Text = "Tên:", Left = 12, Top = 350, AutoSize = true };
+        txtName.SetBounds(90, 346, 300, 25);
         txtName.MaxLength = 100;
 
-        var lblPrice = new Label { Text = "Giá:", Left = 12, Top = 352, AutoSize = true };
-        numPrice.SetBounds(90, 348, 150, 25);
+        var lblPrice = new Label { Text = "Giá:", Left = 12, Top = 384, AutoSize = true };
+        numPrice.SetBounds(90, 380, 150, 25);
         numPrice.Minimum = 0;
         numPrice.Maximum = 100_000_000;
         numPrice.DecimalPlaces = 0;
@@ -64,25 +68,26 @@ public class frmProducts : Form
 
         chkActive.Text = "Đang bán";
         chkActive.Checked = true;
-        chkActive.SetBounds(90, 382, 120, 25);
+        chkActive.SetBounds(90, 414, 120, 25);
 
         // Nút
         void Setup(Button b, string text, int x, EventHandler onClick)
-        { b.Text = text; b.SetBounds(x, 425, 100, 32); b.Click += onClick; }
+        { b.Text = text; b.SetBounds(x, 457, 100, 32); b.Click += onClick; }
 
         Setup(btnNew,     "Thêm mới", 12,  btnNew_Click);
         Setup(btnSave,    "Lưu",      120, btnSave_Click);
         Setup(btnDelete,  "Xoá",      228, btnDelete_Click);
         Setup(btnRefresh, "Làm mới",  336, btnRefresh_Click);
         Setup(btnBom, "Thiết lập BOM…", 444, BtnBom_Click);
-        btnBom.Width = 130;
+        btnBom.AutoSize = true;
         btnBom.Enabled = false;   // để Ngày 5
 
         Controls.AddRange(new Control[]
         {
             dgvProducts, lblName, txtName, lblPrice, numPrice, chkActive,
-            btnNew, btnSave, btnDelete, btnRefresh, btnBom
+            btnNew, btnSave, btnDelete, btnRefresh, btnBom, txtSearch
         });
+        txtSearch.TextChanged += (_, _) => ApplyFilter();
     }
 
     
@@ -91,12 +96,18 @@ public class frmProducts : Form
         try
         {
             var list = await _api.GetAsync<List<ProductDto>>("/api/products");
-            _items.Clear();
-            if (list is not null)
-                foreach (var p in list) _items.Add(p);
+            _all = list ?? [];
+            ApplyFilter();
             if (_items.Count == 0) StartCreate();
         }
         catch (ApiException ex) { ErrorPresenter.Show(this, ex); }
+    }
+
+    private void ApplyFilter()
+    {
+        _items.Clear();
+        foreach (var p in _all.Where(p => TextSearch.Matches(p.ProductName, txtSearch.Text)))
+            _items.Add(p);
     }
 
     private void dgvProducts_SelectionChanged(object? s, EventArgs e)

@@ -14,7 +14,10 @@ public class frmMain : Form
 {
     private readonly IAuthApi _auth;
     private readonly MenuStrip _menu = new();
-    private readonly Label _hello = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI", 16) };
+    private readonly Label _hello = new() { Dock = DockStyle.Top, Height = 64, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(24, 0, 0, 0), Font = new Font("Segoe UI", 15), BackColor = Theme.Primary, ForeColor = Color.White };
+    private readonly FlowLayoutPanel _tiles = new() { Dock = DockStyle.Fill, AutoScroll = true };
+    private static readonly Size CardSize = new(260, 130);
+    private const int CardMargin = 12;
     private readonly Label _lowStock = new() { Dock = DockStyle.Bottom, Height = 36, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Segoe UI", 11, FontStyle.Bold) };
     private readonly Dictionary<Guid, LowStockAlertDto> _lowItems = [];
 
@@ -24,8 +27,11 @@ public class frmMain : Form
     {
         _auth = auth;
         Text = "Quản lý quán Cafe";
+        Theme.Apply(this);
         WindowState = FormWindowState.Maximized;
-        _hello.Text = $"Xin chào, {Program.Session.FullName} ({Program.Session.Role})";
+        _hello.Text = $"☕  QUÁN CAFE    |    Xin chào, {Program.Session.FullName} · {Program.Session.Role}";
+        _tiles.Resize += (_, _) => CenterCards();
+        Controls.Add(_tiles);
         Controls.Add(_hello);
         Controls.Add(_lowStock);
         Controls.Add(_menu);
@@ -73,26 +79,18 @@ public class frmMain : Form
              waiter = role == "Waiter",   barista = role == "Barista";
 
         if (cashier || waiter) // API gọi món chỉ cho Cashier/Waiter
-            Add("Gọi món", "frmPOS", () => new frmPOS());          // SCR_004
+            Add("🧾", "Gọi món", "Sơ đồ bàn, nhận order", () => new frmPOS());                       // SCR_004
         if (manager || cashier)
-            Add("Thanh toán", "frmPayment", () => new frmPayment(Program.Api)); // SCR_005
+            Add("💳", "Thanh toán", "Thu tiền, in hóa đơn", () => new frmPayment(Program.Api));       // SCR_005
         if (manager || barista)
-            Add("Điều phối pha chế", "frmBar", () => new frmBar()); // SCR_006
+            Add("☕", "Điều phối pha chế", "Hàng đợi món cần pha", () => new frmBar());                // SCR_006
         if (manager)
         {
-            _menu.Items.Add("Sản phẩm", null, (_, _) =>
-            {
-                using var form = new frmProducts(Program.Api);
-                form.ShowDialog(this);
-            });                        // SCR_007
-            _menu.Items.Add("Định lượng BOM", null, (_, _) =>
-            {
-                using var form = new frmBom(Program.Api);
-                form.ShowDialog(this);
-            });                       // SCR_008
-            Add("Kho", "frmInventory", () => new frmInventory(Program.Api)); // SCR_009                            // SCR_009
-            Add("Nhân viên", "frmStaff", () => new frmStaff());    // SCR_010
-            Add("Báo cáo", "frmReport", () => new frmReport(Program.Api)); // SCR_011
+            Add("🍰", "Sản phẩm", "Thực đơn và giá bán", () => new frmProducts(Program.Api));         // SCR_007
+            Add("⚖", "Định lượng BOM", "Công thức nguyên liệu", () => new frmBom(Program.Api));       // SCR_008
+            Add("📦", "Kho", "Nhập, xuất, kiểm kê", () => new frmInventory(Program.Api));              // SCR_009
+            Add("👥", "Nhân viên", "Tài khoản và phân quyền", () => new frmStaff());                   // SCR_010
+            Add("📊", "Báo cáo", "Doanh thu, món bán chạy", () => new frmReport(Program.Api));         // SCR_011
         }
 
         var account = new ToolStripMenuItem("Tài khoản");
@@ -110,14 +108,44 @@ public class frmMain : Form
         _menu.Items.Add(account);
     }
 
-    private void Add(string text, string formName, Func<Form>? open = null)
+    private void Add(string icon, string title, string desc, Func<Form> open)
     {
-        _menu.Items.Add(text, null, (_, _) =>
+        var card = new Button { Text = title, Size = CardSize, Margin = new Padding(CardMargin), Cursor = Cursors.Hand };
+        bool hover = false;
+        card.MouseEnter += (_, _) => { hover = true; card.Invalidate(); };
+        card.MouseLeave += (_, _) => { hover = false; card.Invalidate(); };
+        card.Paint += (_, e) =>
         {
-            if (open is null) { MessageBox.Show(this, $"{formName} chưa làm", text); return; }
+            var g = e.Graphics;
+            var r = card.ClientRectangle;
+            g.Clear(hover ? Theme.RowAlt : Color.White);
+            using (var border = new Pen(card.Focused ? Theme.Primary : Color.FromArgb(0xE2, 0xD6, 0xC8)))
+                g.DrawRectangle(border, 0, 0, r.Width - 1, r.Height - 1);
+            using (var accent = new SolidBrush(Theme.Primary))
+                g.FillRectangle(accent, 0, 0, 6, r.Height);
+            using var iconFont = new Font("Segoe UI Emoji", 20);
+            using var titleFont = new Font("Segoe UI", 13, FontStyle.Bold);
+            using var descFont = new Font("Segoe UI", 9.5f);
+            TextRenderer.DrawText(g, icon, iconFont, new Point(22, 16), Theme.Primary);
+            TextRenderer.DrawText(g, title, titleFont, new Point(22, 62), Theme.Primary);
+            TextRenderer.DrawText(g, desc, descFont, new Point(23, 92), Color.DimGray);
+        };
+        card.GotFocus += (_, _) => card.Invalidate();
+        card.LostFocus += (_, _) => card.Invalidate();
+        card.Click += (_, _) =>
+        {
             using var f = open();
             f.ShowDialog(this);
-        });
+        };
+        _tiles.Controls.Add(card);
+    }
+
+    private void CenterCards()
+    {
+        int cell = CardSize.Width + 2 * CardMargin;
+        int perRow = Math.Clamp(_tiles.ClientSize.Width / cell, 1, Math.Max(1, Math.Min(4, _tiles.Controls.Count)));
+        int side = Math.Max(0, (_tiles.ClientSize.Width - perRow * cell) / 2);
+        _tiles.Padding = new Padding(side, 40, side, 0);
     }
 
     internal void ForceLogout()

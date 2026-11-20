@@ -44,6 +44,8 @@ public class frmBom : Form
     private void BuildUi(string? productName)
     {
         Text = "Thiết lập BOM";
+        Theme.Apply(this);
+        Theme.Shortcuts(this);
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(700, 400);
         MinimumSize = new Size(720, 360);
@@ -90,7 +92,9 @@ public class frmBom : Form
             MessageBox.Show(this, "Định lượng phải là số.");
         };
 
-        _materials.DropDownStyle = ComboBoxStyle.DropDownList;
+        _materials.DropDownStyle = ComboBoxStyle.DropDown;
+        _materials.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+        _materials.AutoCompleteSource = AutoCompleteSource.ListItems;
         _materials.DisplayMember = nameof(MaterialDto.MaterialName);
         _materials.Width = 175;
 

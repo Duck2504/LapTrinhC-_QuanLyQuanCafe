@@ -13,6 +13,7 @@ public class frmLogin : Form
     {
         _auth = auth;
         Text = "Đăng nhập";
+        Theme.Apply(this);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using QuanLyCafe.Desktop.Models;
 using QuanLyCafe.Desktop.Services;
 
@@ -21,6 +22,8 @@ public class frmInventory : Form
     {
         _api = api;
         Text = "Quản lý kho";
+        Theme.Apply(this);
+        Theme.Shortcuts(this);
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(760, 420);
 
@@ -65,8 +68,8 @@ public class frmInventory : Form
         _grid.Columns.AddRange(
             Column("Nguyên liệu", nameof(MaterialDto.MaterialName)),
             Column("Đơn vị", nameof(MaterialDto.Unit)),
-            Column("Tồn hiện tại", nameof(MaterialDto.StockQuantity)),
-            Column("Mức tối thiểu", nameof(MaterialDto.MinQuantity)));
+            Column("Tồn hiện tại", nameof(MaterialDto.StockQuantity), "#,0.###"),
+            Column("Mức tối thiểu", nameof(MaterialDto.MinQuantity), "#,0.###"));
 
         _grid.DataBindingComplete += (_, _) =>
         {
@@ -82,8 +85,12 @@ public class frmInventory : Form
         _tabs.TabPages.Add(tab);
     }
 
-    private static DataGridViewTextBoxColumn Column(string title, string property) =>
-        new() { HeaderText = title, DataPropertyName = property };
+    private static DataGridViewTextBoxColumn Column(string title, string property, string? format = null) =>
+        new()
+        {
+            HeaderText = title, DataPropertyName = property,
+            DefaultCellStyle = { Format = format, FormatProvider = CultureInfo.GetCultureInfo("vi-VN") },
+        };
 
     private void AddEntryTab(
         string title, string quantityLabel, decimal minimum,
@@ -91,7 +98,9 @@ public class frmInventory : Form
     {
         var material = new ComboBox
         {
-            DropDownStyle = ComboBoxStyle.DropDownList,
+            DropDownStyle = ComboBoxStyle.DropDown,
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend,
+            AutoCompleteSource = AutoCompleteSource.ListItems,
             DisplayMember = nameof(MaterialDto.MaterialName),
             Width = 260
         };
