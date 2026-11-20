@@ -49,6 +49,21 @@ public class PaymentServiceTests
     }
 
     [Fact]
+    public async Task CashPayment_DroppingBelowMinimum_AlertsOnceEvenWhenRepeated()
+    {
+        var scenario = new CashPaymentScenario();
+        scenario.Material.MinQuantity = 50m;
+        var repository = new PaymentRepositories(scenario);
+        var service = repository.CreateService();
+
+        await scenario.PayAsync(service);
+        await scenario.PayAsync(service); // thanh toán lặp: không trừ kho, không cảnh báo lại
+
+        var alert = Assert.Single(repository.Notifier.LowStock);
+        Assert.Equal((scenario.Material.MaterialID, 40m), (alert.MaterialId, alert.StockQuantity));
+    }
+
+    [Fact]
     public async Task CashPayment_WithInsufficientStock_IsRejectedBeforeSaving()
     {
         var scenario = new CashPaymentScenario(stockQuantity: 50m);
@@ -72,7 +87,9 @@ public class PaymentServiceTests
         public int SaveCount { get; private set; }
 
         public PaymentService CreateService() =>
-            new(this, new InventoryService(this, this), this, new CashPaymentScenario.UnusedGateway());
+            new(this, new InventoryService(this, this), this, new CashPaymentScenario.UnusedGateway(), Notifier);
+
+        public RecordingNotifier Notifier { get; } = new();
 
         public Task<Order?> GetOrderAsync(Guid orderId, CancellationToken ct) =>
             Task.FromResult(orderId == scenario.Order.OrderID ? scenario.Order : null);

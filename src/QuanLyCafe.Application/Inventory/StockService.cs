@@ -1,3 +1,4 @@
+using QuanLyCafe.Application.Common;
 using QuanLyCafe.Domain.Common;
 using QuanLyCafe.Domain.Inventory;
 
@@ -5,7 +6,8 @@ namespace QuanLyCafe.Application.Inventory;
 
 public class StockService(
     IMaterialRepository materials,
-    IStockMovementRepository movements)
+    IStockMovementRepository movements,
+    IRealtimeNotifier notifier)
 {
     private const decimal MaxStockQuantity = 999_999_999_999_999.999m;
 
@@ -74,6 +76,8 @@ public class StockService(
         };
 
         await movements.SaveMovementAsync(movement, ct);
+        if (type == MovementType.Issue)
+            await notifier.NotifyLowStockAsync([material], CancellationToken.None); // sau commit: client hủy thì vẫn phải báo
         return new(movement.MovementID, movement.UserID, newStock);
     }
 
@@ -113,6 +117,7 @@ public class StockService(
                 Quantity = -difference,
                 Note = note
             }, ct);
+            await notifier.NotifyLowStockAsync([material], CancellationToken.None); // sau commit: client hủy thì vẫn phải báo
         }
 
         return new(material.MaterialID, systemQuantity, actualQuantity, difference);

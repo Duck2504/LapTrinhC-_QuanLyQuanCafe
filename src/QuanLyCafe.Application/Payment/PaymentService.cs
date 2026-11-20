@@ -1,4 +1,5 @@
 using System.Text.Json;
+using QuanLyCafe.Application.Common;
 using QuanLyCafe.Application.Inventory;
 using QuanLyCafe.Domain.Common;
 using QuanLyCafe.Domain.Inventory;
@@ -11,7 +12,8 @@ public class PaymentService(
     IOrderRepository orders,
     InventoryService inventory,
     IPaymentRepository payments,
-    IPaymentGateway gateway)
+    IPaymentGateway gateway,
+    IRealtimeNotifier notifier)
 {
     public async Task<InvoiceDto> GetInvoiceAsync(Guid orderId, CancellationToken ct)
     {
@@ -47,8 +49,10 @@ public class PaymentService(
             }
         }
 
-        return await payments.RunAsync(request.OrderId, async () =>
+        List<Material> deducted = [];
+        var paid = await payments.RunAsync(request.OrderId, async () =>
         {
+            deducted = [];
             var order = await orders.GetOrderAsync(request.OrderId, ct)
                 ?? throw new NotFoundException("Không tìm thấy đơn.");
 
@@ -115,8 +119,12 @@ public class PaymentService(
             var result = new PaymentResultDto(BuildInvoice(order, cashierName), change);
             order.PaymentResultJson = JsonSerializer.Serialize(result);
             await payments.SaveAsync(movements, ct);
+            deducted = needed.Keys.Select(id => materials[id]).ToList();
             return result;
         }, ct);
+
+        await notifier.NotifyLowStockAsync(deducted, CancellationToken.None); // sau commit
+        return paid;
     }
 
     private async Task AuthorizeElectronicPaymentAsync(
