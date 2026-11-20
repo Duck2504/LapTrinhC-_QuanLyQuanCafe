@@ -83,7 +83,7 @@ public sealed class frmPayment : Form
         _preview.Click += async (_, _) => await RunAsync(PreviewAsync);
         FormClosing += (_, args) =>
         {
-            if (_busy && args.CloseReason == CloseReason.UserClosing)
+            if (_busy && args.CloseReason == CloseReason.UserClosing && Program.Session.IsLoggedIn) // hết phiên thì cho đóng
                 args.Cancel = true;
         };
         UpdateControls();

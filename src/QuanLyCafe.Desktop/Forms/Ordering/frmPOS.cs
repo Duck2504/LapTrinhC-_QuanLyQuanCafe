@@ -112,7 +112,7 @@ public class frmPOS : Form
             MessageBox.Show(this, "Số lượng phải là số nguyên lớn hơn 0.", Text);
             e.Cancel = true;
         };
-        FormClosing += (_, e) => e.Cancel = !ConfirmDiscard();
+        FormClosing += (_, e) => e.Cancel = Program.Session.IsLoggedIn && !ConfirmDiscard(); // hết phiên thì đóng luôn
         ShowOrder(null);
     }
 

@@ -32,6 +32,15 @@ public class frmMain : Form
         MainMenuStrip = _menu;
         BuildMenu(Program.Session.Role);
         if (Program.Session.Role == "Manager") ListenLowStock();
+        Program.Api.SessionExpired += OnSessionExpired;
+        FormClosed += (_, _) => Program.Api.SessionExpired -= OnSessionExpired;
+    }
+
+    // API trả 401 (token hết hạn): đóng mọi form (form con bỏ qua hỏi xác nhận khi đã hết phiên) rồi quay về đăng nhập.
+    private void OnSessionExpired()
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        try { BeginInvoke(ForceLogout); } catch (InvalidOperationException) { }
     }
 
     // LowStockAlert (BarHub → nhóm Manager): hiện danh sách nguyên liệu dưới mức tối thiểu ở chân màn hình.
@@ -63,7 +72,7 @@ public class frmMain : Form
         bool manager = role == "Manager", cashier = role == "Cashier",
              waiter = role == "Waiter",   barista = role == "Barista";
 
-        if (manager || cashier || waiter)
+        if (cashier || waiter) // API gọi món chỉ cho Cashier/Waiter
             Add("Gọi món", "frmPOS", () => new frmPOS());          // SCR_004
         if (manager || cashier)
             Add("Thanh toán", "frmPayment", () => new frmPayment(Program.Api)); // SCR_005
@@ -113,6 +122,10 @@ public class frmMain : Form
 
     internal void ForceLogout()
     {
-        throw new NotImplementedException();
+        if (LoggedOut) return;
+        foreach (var f in Application.OpenForms.Cast<Form>().Where(f => f != this).ToList())
+            f.Close();
+        LoggedOut = true;
+        Close();
     }
 }
