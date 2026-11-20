@@ -30,6 +30,7 @@ services:
       ConnectionStrings__Default: "Server=db;Database=QuanLyCafe;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True"
       Jwt__Key: ${JWT_KEY:?Thiếu JWT_KEY trong .env}
       Seed__ManagerPassword: ${MANAGER_PASSWORD:?Thiếu MANAGER_PASSWORD trong .env}
+      TZ: Asia/Ho_Chi_Minh
     ports:
       - "${API_PORT:-8080}:8080"
     volumes:
