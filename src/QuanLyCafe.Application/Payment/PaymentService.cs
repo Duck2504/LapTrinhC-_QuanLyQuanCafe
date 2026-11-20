@@ -43,7 +43,7 @@ public class PaymentService(
 
             if (preview.Status != OrderStatus.Paid)
             {
-                EnsurePayable(preview.Status, preview.HasItems);
+                EnsurePayable(preview.Status, preview.HasItems, preview.HasUnfinishedItems);
                 await AuthorizeElectronicPaymentAsync(request, preview.TotalAmount, ct);
                 approvedAmount = preview.TotalAmount;
             }
@@ -59,7 +59,8 @@ public class PaymentService(
             if (order.Status == OrderStatus.Paid)
                 return GetExistingResult(order);
 
-            EnsurePayable(order.Status, order.OrderDetails.Count > 0);
+            EnsurePayable(order.Status, order.OrderDetails.Count > 0,
+                order.OrderDetails.Any(d => d.Status is OrderDetailStatus.Pending or OrderDetailStatus.Preparing));
 
             decimal change = 0;
             if (request.Method == PaymentMethod.Cash)
@@ -144,13 +145,16 @@ public class PaymentService(
         }
     }
 
-    private static void EnsurePayable(OrderStatus status, bool hasItems)
+    private static void EnsurePayable(OrderStatus status, bool hasItems, bool hasUnfinishedItems)
     {
         if (status != OrderStatus.Open)
             throw new BusinessRuleException(ErrorCodes.OrderAlreadyPaid, "Đơn không còn mở để thanh toán.");
 
         if (!hasItems)
             throw new ValidationException(ErrorCodes.ValidationFailed, "Đơn chưa có món.");
+
+        if (hasUnfinishedItems)
+            throw new BusinessRuleException(ErrorCodes.ValidationFailed, "Còn món chưa pha xong (Chờ hoặc Đang làm), chưa thể thanh toán.");
     }
 
     private static PaymentResultDto GetExistingResult(Order order)

@@ -13,7 +13,8 @@ public class PaymentRepository(AppDbContext db, IOrderRepository orders)
         db.Orders.AsNoTracking()
             .Where(order => order.OrderID == orderId)
             .Select(order => new PaymentPreview(
-                order.Status, order.TotalAmount, order.OrderDetails.Any()))
+                order.Status, order.TotalAmount, order.OrderDetails.Any(),
+                order.OrderDetails.Any(d => d.Status == OrderDetailStatus.Pending || d.Status == OrderDetailStatus.Preparing)))
             .SingleOrDefaultAsync(ct);
 
     public async Task<T> RunAsync<T>(

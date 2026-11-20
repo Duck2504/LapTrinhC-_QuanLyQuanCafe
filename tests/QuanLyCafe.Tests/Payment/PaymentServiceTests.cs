@@ -80,6 +80,25 @@ public class PaymentServiceTests
         Assert.Equal(0, repository.SaveCount);
     }
 
+    [Theory]
+    [InlineData(OrderDetailStatus.Pending)]
+    [InlineData(OrderDetailStatus.Preparing)]
+    public async Task CashPayment_WithUnfinishedItems_IsRejectedBeforeSaving(OrderDetailStatus status)
+    {
+        var scenario = new CashPaymentScenario();
+        scenario.Order.OrderDetails[0].Status = status;
+        var repository = new PaymentRepositories(scenario);
+
+        var error = await Assert.ThrowsAsync<BusinessRuleException>(() =>
+            scenario.PayAsync(repository.CreateService()));
+
+        Assert.Equal(ErrorCodes.ValidationFailed, error.Code);
+        Assert.Equal(OrderStatus.Open, scenario.Order.Status);
+        Assert.Equal(TableStatus.Serving, scenario.Table.Status);
+        Assert.Equal(100m, scenario.Material.StockQuantity);
+        Assert.Equal(0, repository.SaveCount);
+    }
+
     private sealed class PaymentRepositories(CashPaymentScenario scenario)
         : IPaymentRepository, IOrderRepository, IProductRepository, IMaterialRepository
     {
