@@ -38,6 +38,8 @@ public class frmBar : Form
     public frmBar()
     {
         Text = "Điều phối pha chế";
+        Theme.Apply(this);
+        Theme.Shortcuts(this, btnReload);
         Size = new Size(1000, 650);
         StartPosition = FormStartPosition.CenterParent;
 
@@ -69,6 +71,12 @@ public class frmBar : Form
         btnUnavailable.Click += async (_, _) => await RunAsync(ReportUnavailableAsync);
         btnReload.Click += async (_, _) => await RunAsync(ConnectAndLoadAsync);
         grid.SelectionChanged += (_, _) => UpdateButtons();
+        grid.CellDoubleClick += async (_, e) =>
+        {
+            if (e.RowIndex < 0) return;
+            if (btnPreparing.Enabled) await RunAsync(() => SetStatusAsync(OrderDetailStatus.Preparing));
+            else if (btnDone.Enabled) await RunAsync(() => SetStatusAsync(OrderDetailStatus.Done));
+        };
 
         _hub.TicketCreated += OnTicketCreated;
         _hub.ItemStatusChanged += OnItemStatusChanged;

@@ -7,14 +7,13 @@ namespace QuanLyCafe.Desktop.Forms.Payment;
 public sealed class frmPayment : Form
 {
     private readonly ApiClient _api;
-    private readonly ComboBox _openOrders = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 350 };
-    private readonly TextBox _orderId = new() { Width = 290, PlaceholderText = "Nhập mã đơn" };
-    private readonly Button _refresh = new() { Text = "Làm mới", AutoSize = true };
-    private readonly Button _load = new() { Text = "Tải đơn", AutoSize = true };
+    private readonly ListBox _openOrders = new() { Dock = DockStyle.Fill, IntegralHeight = false, ItemHeight = 48, DrawMode = DrawMode.OwnerDrawFixed };
+    private readonly Button _refresh = new() { Text = "Làm mới", Dock = DockStyle.Bottom, Height = 34 };
     private readonly ComboBox _method = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 115 };
-    private readonly NumericUpDown _cash = new() { Maximum = decimal.MaxValue, DecimalPlaces = 2, ThousandsSeparator = true, Width = 125 };
-    private readonly Label _summary = new() { AutoSize = true, Text = "Chọn một đơn để xem món và tổng tiền." };
-    private readonly Label _change = new() { AutoSize = true };
+    private readonly NumericUpDown _cash = new() { Maximum = decimal.MaxValue, DecimalPlaces = 0, Increment = 1000, ThousandsSeparator = true, Width = 140 };
+    private readonly Label _summary = new() { AutoSize = true, Font = new Font("Segoe UI", 13, FontStyle.Bold), Text = "Chọn một đơn để xem món và tổng tiền." };
+    private readonly Label _change = new() { AutoSize = true, Font = new Font("Segoe UI", 16, FontStyle.Bold), ForeColor = Theme.Primary };
+    private readonly List<Button> _quickCash = [];
     private readonly Button _pay = new() { Text = "Thanh toán", AutoSize = true };
     private readonly Button _preview = new() { Text = "Xem trước / In hóa đơn", AutoSize = true };
     private readonly DataGridView _items = new()
@@ -29,15 +28,16 @@ public sealed class frmPayment : Form
     private decimal? _paidChange;
     private bool _busy;
 
-    public frmPayment(ApiClient api)
+    public frmPayment(ApiClient api, Guid? openOrderId = null)
     {
         _api = api;
         Text = "Thanh toán";
+        Theme.Apply(this);
+        Theme.Shortcuts(this, _refresh);
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(820, 490);
         MinimumSize = new Size(720, 440);
 
-        _openOrders.DisplayMember = nameof(OpenOrderOption.Label);
         _method.Items.AddRange(Enum.GetValues<PaymentMethod>()
             .Select(method => new PaymentOption(method, InvoicePrinter.MethodName(method))).ToArray());
         _method.DisplayMember = nameof(PaymentOption.Label);
@@ -49,33 +49,39 @@ public sealed class frmPayment : Form
         AddColumn("Thành tiền", nameof(InvoiceLineDto.LineTotal), 18, "#,0.##");
         AddColumn("Ghi chú", nameof(InvoiceLineDto.Note), 24);
 
+        _quickCash.Add(QuickCash("Đủ tiền", () => _order?.TotalAmount ?? 0));
+        foreach (var amount in new decimal[] { 50_000, 100_000, 200_000, 500_000 })
+            _quickCash.Add(QuickCash($"{amount / 1000:0}k", () => amount));
+
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 6 };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(Row(Caption("Đơn đang mở"), _openOrders, _refresh), 0, 0);
-        layout.Controls.Add(Row(Caption("Mã đơn"), _orderId, _load), 0, 1);
-        layout.Controls.Add(Row(_summary), 0, 2);
-        layout.Controls.Add(_items, 0, 3);
-        layout.Controls.Add(Row(Caption("Phương thức"), _method, Caption("Tiền khách đưa"), _cash, _change), 0, 4);
+        for (var i = 0; i < 4; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.Controls.Add(Row(_summary), 0, 0);
+        layout.Controls.Add(_items, 0, 1);
+        layout.Controls.Add(Row(Caption("Phương thức"), _method, Caption("Tiền khách đưa"), _cash), 0, 2);
+        layout.Controls.Add(Row([.. _quickCash]), 0, 3);
+        layout.Controls.Add(Row(_change), 0, 4);
         layout.Controls.Add(Row(_pay, _preview), 0, 5);
-        Controls.Add(layout);
 
-        Shown += async (_, _) => await RunAsync(RefreshOrdersAsync);
-        _refresh.Click += async (_, _) => await RunAsync(RefreshOrdersAsync);
-        _openOrders.SelectionChangeCommitted += async (_, _) =>
+        var ordersBox = new GroupBox { Text = "Đơn đang mở", Dock = DockStyle.Left, Width = 230, Padding = new Padding(8) };
+        ordersBox.Controls.Add(_openOrders);
+        ordersBox.Controls.Add(_refresh);
+        Controls.Add(layout);
+        Controls.Add(ordersBox);
+
+        Shown += async (_, _) =>
         {
-            if (_openOrders.SelectedItem is OpenOrderOption option)
-            {
-                _orderId.Text = option.Id.ToString();
-                await RunAsync(LoadOrderAsync);
-            }
+            await RunAsync(RefreshOrdersAsync);
+            _openOrders.SelectedItem = _openOrders.Items.OfType<OpenOrderOption>().FirstOrDefault(o => o.Id == openOrderId);
         };
-        _orderId.TextChanged += (_, _) => ShowOrder(null);
-        _load.Click += async (_, _) => await RunAsync(LoadOrderAsync);
+        _refresh.Click += async (_, _) => await RunAsync(RefreshOrdersAsync);
+        _openOrders.DrawItem += DrawOrder;
+        _openOrders.SelectedIndexChanged += async (_, _) =>
+        {
+            if (!_busy && _openOrders.SelectedItem is OpenOrderOption option)
+                await RunAsync(() => LoadOrderAsync(option.Id));
+        };
         _method.SelectedIndexChanged += (_, _) => UpdateControls();
         _cash.ValueChanged += (_, _) => UpdateControls();
         _cash.TextChanged += (_, _) => UpdateControls();
@@ -83,7 +89,7 @@ public sealed class frmPayment : Form
         _preview.Click += async (_, _) => await RunAsync(PreviewAsync);
         FormClosing += (_, args) =>
         {
-            if (_busy && args.CloseReason == CloseReason.UserClosing)
+            if (_busy && args.CloseReason == CloseReason.UserClosing && Program.Session.IsLoggedIn) // hết phiên thì cho đóng
                 args.Cancel = true;
         };
         UpdateControls();
@@ -94,6 +100,27 @@ public sealed class frmPayment : Form
         var row = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
         row.Controls.AddRange(controls);
         return row;
+    }
+
+    private Button QuickCash(string text, Func<decimal> amount)
+    {
+        var b = new Button { Text = text, AutoSize = true, MinimumSize = new Size(72, 34) };
+        b.Click += (_, _) => _cash.Value = Math.Min(_cash.Maximum, amount());
+        return b;
+    }
+
+    private void DrawOrder(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0) return;
+        var option = (OpenOrderOption)_openOrders.Items[e.Index];
+        var selected = (e.State & DrawItemState.Selected) != 0;
+        using var back = new SolidBrush(selected ? Theme.PrimaryLight : e.Index % 2 == 0 ? Color.White : Theme.RowAlt);
+        e.Graphics.FillRectangle(back, e.Bounds);
+        var color = selected ? Color.White : Color.Black;
+        var bounds = Rectangle.Inflate(e.Bounds, -8, -4);
+        TextRenderer.DrawText(e.Graphics, option.Label, Font, bounds, color, TextFormatFlags.Top | TextFormatFlags.Left);
+        using var bold = new Font(Font, FontStyle.Bold);
+        TextRenderer.DrawText(e.Graphics, option.Total, bold, bounds, color, TextFormatFlags.Bottom | TextFormatFlags.Left);
     }
 
     private static Label Caption(string text) =>
@@ -138,15 +165,12 @@ public sealed class frmPayment : Form
         var orders = await _api.GetAsync<List<OrderDto>>("api/orders/open") ?? [];
         _openOrders.Items.Clear();
         _openOrders.Items.AddRange(orders.Select(order => new OpenOrderOption(order.Id,
-            $"{order.TableName ?? "Mang đi"}   {order.OrderDate:HH:mm dd/MM}   {InvoicePrinter.Money(order.TotalAmount)}")).ToArray());
+            $"{order.TableName ?? "Mang đi"}  ·  {order.OrderDate:HH:mm}", InvoicePrinter.Money(order.TotalAmount))).ToArray());
     }
 
-    private async Task LoadOrderAsync()
+    private async Task LoadOrderAsync(Guid id)
     {
         ShowOrder(null);
-        if (!Guid.TryParse(_orderId.Text.Trim(), out var id) || id == Guid.Empty)
-            throw new ApiException(0, null, "Vui lòng nhập mã đơn hợp lệ.");
-
         var order = await _api.GetAsync<OrderDto>($"api/orders/{id}")
             ?? throw new ApiException(0, null, "Không tìm thấy đơn.");
         ShowOrder(order);
@@ -171,22 +195,27 @@ public sealed class frmPayment : Form
             {
                 OrderStatus.Paid => "Đã thanh toán",
                 OrderStatus.Cancelled => "Đã hủy",
+                _ when Unfinished(order) => "Còn món chưa pha xong",
                 _ => "Chưa thanh toán"
             };
-            _summary.Text = $"{order.TableName ?? "Mang đi"}   |   {status}   |   Tổng tiền {InvoicePrinter.Money(order.TotalAmount)}";
+            _summary.Text = $"{order.TableName ?? "Mang đi"}   |   {status}\nTổng tiền {InvoicePrinter.Money(order.TotalAmount)}";
         }
         UpdateControls();
     }
+
+    private static bool Unfinished(OrderDto order) =>
+        order.Items.Any(i => i.Status is OrderDetailStatus.Pending or OrderDetailStatus.Preparing);
 
     private PaymentMethod SelectedMethod => ((PaymentOption)_method.SelectedItem!).Method;
 
     private void UpdateControls()
     {
-        var canPay = _order is { Status: OrderStatus.Open, Items.Count: > 0 };
-        _orderId.Enabled = _load.Enabled = _refresh.Enabled = !_busy;
+        var canPay = _order is { Status: OrderStatus.Open, Items.Count: > 0 } && !Unfinished(_order);
+        _refresh.Enabled = !_busy;
         _openOrders.Enabled = !_busy && _openOrders.Items.Count > 0;
         _method.Enabled = _pay.Enabled = !_busy && canPay;
         _cash.Enabled = !_busy && canPay && SelectedMethod == PaymentMethod.Cash;
+        foreach (var b in _quickCash) b.Enabled = _cash.Enabled;
         _preview.Enabled = !_busy && _order?.Status == OrderStatus.Paid;
         _change.Text = "";
 
@@ -242,6 +271,6 @@ public sealed class frmPayment : Form
         InvoicePrinter.ShowPreview(this, _invoice);
     }
 
-    private sealed record OpenOrderOption(Guid Id, string Label);
+    private sealed record OpenOrderOption(Guid Id, string Label, string Total);
     private sealed record PaymentOption(PaymentMethod Method, string Label);
 }

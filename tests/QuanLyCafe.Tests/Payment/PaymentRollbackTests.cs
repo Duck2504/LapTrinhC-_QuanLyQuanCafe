@@ -41,7 +41,7 @@ public class PaymentRollbackTests
                 var orders = new OrderRepository(db);
                 var inventory = new InventoryService(new ProductRepository(db), new MaterialRepository(db));
                 var service = new PaymentService(orders, inventory, new PaymentRepository(db, orders),
-                    new CashPaymentScenario.UnusedGateway());
+                    new CashPaymentScenario.UnusedGateway(), new RecordingNotifier());
 
                 await Assert.ThrowsAsync<SimulatedPaymentSaveFailure>(() => scenario.PayAsync(service));
             }

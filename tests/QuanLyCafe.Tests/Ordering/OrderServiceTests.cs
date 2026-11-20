@@ -144,6 +144,7 @@ public class OrderServiceTests
         var order = await MoBan1();
         await _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, "ít đá"), new(_cafeSua.ProductID, 2, null)]));
         _repo.Orders[0].OrderDetails[0].Status = OrderDetailStatus.Preparing; // đã gửi lần trước, bar đang làm
+        _inventory.Checked.Clear(); // bỏ lần kiểm kho của PUT items
 
         await _service.SubmitAsync(order.Id);
 
@@ -163,6 +164,31 @@ public class OrderServiceTests
         var ex = await Assert.ThrowsAsync<BusinessRuleException>(() => _service.SubmitAsync(order.Id));
         Assert.Equal(ErrorCodes.StockInsufficient, ex.Code);
         Assert.Empty(_notifier.Tickets);
+    }
+
+    [Fact]
+    public async Task Sua_mon_thieu_nguyen_lieu_khong_luu_mon_nao()
+    {
+        var order = await MoBan1();
+        _inventory.Error = new BusinessRuleException(ErrorCodes.StockInsufficient, "Hết sữa");
+
+        var ex = await Assert.ThrowsAsync<BusinessRuleException>(() =>
+            _service.UpdateItemsAsync(order.Id, new([new(_cafeSua.ProductID, 1, null)])));
+
+        Assert.Equal(ErrorCodes.StockInsufficient, ex.Code);
+        Assert.Empty(_repo.Orders[0].OrderDetails);
+        Assert.Empty(await _service.GetBarTicketsAsync());
+    }
+
+    [Fact]
+    public async Task Xoa_mon_khi_het_nguyen_lieu_van_duoc()
+    {
+        var (orderId, first, _) = await Ban1CoHaiMon();
+        _inventory.Error = new BusinessRuleException(ErrorCodes.StockInsufficient, "Hết sữa");
+
+        var dto = await _service.UpdateItemsAsync(orderId, new([new(_cafeSua.ProductID, 1, null, first)]));
+
+        Assert.Equal(first, Assert.Single(dto.Items).Id);
     }
 
     [Fact]

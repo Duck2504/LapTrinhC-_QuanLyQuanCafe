@@ -1,4 +1,5 @@
 using System.Text.Json;
+using QuanLyCafe.Application.Common;
 using QuanLyCafe.Application.Inventory;
 using QuanLyCafe.Domain.Common;
 using QuanLyCafe.Domain.Inventory;
@@ -11,7 +12,8 @@ public class PaymentService(
     IOrderRepository orders,
     InventoryService inventory,
     IPaymentRepository payments,
-    IPaymentGateway gateway)
+    IPaymentGateway gateway,
+    IRealtimeNotifier notifier)
 {
     public async Task<InvoiceDto> GetInvoiceAsync(Guid orderId, CancellationToken ct)
     {
@@ -41,21 +43,24 @@ public class PaymentService(
 
             if (preview.Status != OrderStatus.Paid)
             {
-                EnsurePayable(preview.Status, preview.HasItems);
+                EnsurePayable(preview.Status, preview.HasItems, preview.HasUnfinishedItems);
                 await AuthorizeElectronicPaymentAsync(request, preview.TotalAmount, ct);
                 approvedAmount = preview.TotalAmount;
             }
         }
 
-        return await payments.RunAsync(request.OrderId, async () =>
+        List<Material> deducted = [];
+        var paid = await payments.RunAsync(request.OrderId, async () =>
         {
+            deducted = [];
             var order = await orders.GetOrderAsync(request.OrderId, ct)
                 ?? throw new NotFoundException("Không tìm thấy đơn.");
 
             if (order.Status == OrderStatus.Paid)
                 return GetExistingResult(order);
 
-            EnsurePayable(order.Status, order.OrderDetails.Count > 0);
+            EnsurePayable(order.Status, order.OrderDetails.Count > 0,
+                order.OrderDetails.Any(d => d.Status is OrderDetailStatus.Pending or OrderDetailStatus.Preparing));
 
             decimal change = 0;
             if (request.Method == PaymentMethod.Cash)
@@ -115,8 +120,12 @@ public class PaymentService(
             var result = new PaymentResultDto(BuildInvoice(order, cashierName), change);
             order.PaymentResultJson = JsonSerializer.Serialize(result);
             await payments.SaveAsync(movements, ct);
+            deducted = needed.Keys.Select(id => materials[id]).ToList();
             return result;
         }, ct);
+
+        await notifier.NotifyLowStockAsync(deducted, CancellationToken.None); // sau commit
+        return paid;
     }
 
     private async Task AuthorizeElectronicPaymentAsync(
@@ -136,13 +145,16 @@ public class PaymentService(
         }
     }
 
-    private static void EnsurePayable(OrderStatus status, bool hasItems)
+    private static void EnsurePayable(OrderStatus status, bool hasItems, bool hasUnfinishedItems)
     {
         if (status != OrderStatus.Open)
             throw new BusinessRuleException(ErrorCodes.OrderAlreadyPaid, "Đơn không còn mở để thanh toán.");
 
         if (!hasItems)
             throw new ValidationException(ErrorCodes.ValidationFailed, "Đơn chưa có món.");
+
+        if (hasUnfinishedItems)
+            throw new BusinessRuleException(ErrorCodes.ValidationFailed, "Còn món chưa pha xong (Chờ hoặc Đang làm), chưa thể thanh toán.");
     }
 
     private static PaymentResultDto GetExistingResult(Order order)

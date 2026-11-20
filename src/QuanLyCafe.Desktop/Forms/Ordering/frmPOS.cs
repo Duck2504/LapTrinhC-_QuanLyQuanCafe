@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using QuanLyCafe.Desktop.Models;
+using QuanLyCafe.Desktop.Forms.Payment;
 using QuanLyCafe.Desktop.Services;
 
 namespace QuanLyCafe.Desktop.Forms.Ordering;
@@ -22,7 +23,8 @@ public class frmPOS : Form
     }
 
     private readonly FlowLayoutPanel pnlTables = new() { Dock = DockStyle.Fill, AutoScroll = true };
-    private readonly ListBox lstMenu = new() { Dock = DockStyle.Fill, FormattingEnabled = true };
+    private readonly FlowLayoutPanel pnlMenu = new() { Dock = DockStyle.Fill, AutoScroll = true };
+    private readonly TextBox txtSearch = new() { Dock = DockStyle.Top, PlaceholderText = "Tìm món..." };
     private readonly DataGridView grid = new()
     {
         Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false, MultiSelect = false,
@@ -33,12 +35,14 @@ public class frmPOS : Form
     private readonly Label lblTotal = new() { AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), Padding = new Padding(16, 6, 0, 0) };
     private readonly Button btnTakeaway = new() { Text = "Mang đi", AutoSize = true };
     private readonly Button btnRefresh = new() { Text = "Làm mới", AutoSize = true };
-    private readonly Button btnAdd = new() { Text = "Thêm món →", Dock = DockStyle.Bottom, Height = 32 };
+    private readonly Button btnPlus = new() { Text = "+", Width = 40 };
+    private readonly Button btnMinus = new() { Text = "−", Width = 40 };
     private readonly Button btnRemove = new() { Text = "Xóa món", AutoSize = true };
     private readonly Button btnSubmit = new() { Text = "Gửi pha chế", AutoSize = true };
     private readonly Button btnDeliver = new() { Text = "Đã giao", AutoSize = true };
     private readonly Button btnMerge = new() { Text = "Gộp bàn...", AutoSize = true };
     private readonly Button btnSplit = new() { Text = "Tách món...", AutoSize = true };
+    private readonly Button btnPay = new() { Text = "Thanh toán", AutoSize = true };
     private readonly Label lblNotice = new() { Dock = DockStyle.Bottom, Height = 30, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
     private readonly BarHubClient _hub = new(Program.BaseUrl, Program.Session);
 
@@ -51,16 +55,18 @@ public class frmPOS : Form
     public frmPOS()
     {
         Text = "Sơ đồ bàn / Gọi món";
+        Theme.Apply(this);
+        Theme.Shortcuts(this, btnRefresh);
         Size = new Size(1200, 700);
         StartPosition = FormStartPosition.CenterParent;
 
         grid.Columns.AddRange(
             new DataGridViewTextBoxColumn { HeaderText = "Món", DataPropertyName = nameof(Line.ProductName), ReadOnly = true, FillWeight = 160 },
             new DataGridViewTextBoxColumn { HeaderText = "SL", DataPropertyName = nameof(Line.Quantity), FillWeight = 40 },
-            new DataGridViewTextBoxColumn { HeaderText = "Ghi chú", DataPropertyName = nameof(Line.Note), FillWeight = 160 },
+            new DataGridViewTextBoxColumn { HeaderText = "Ghi chú", DataPropertyName = nameof(Line.Note), FillWeight = 110 },
             new DataGridViewTextBoxColumn { HeaderText = "Trạng thái", DataPropertyName = nameof(Line.StatusText), ReadOnly = true, FillWeight = 70 },
             new DataGridViewTextBoxColumn { HeaderText = "Đơn giá", DataPropertyName = nameof(Line.UnitPrice), ReadOnly = true, FillWeight = 70, DefaultCellStyle = { Format = "N0" } },
-            new DataGridViewTextBoxColumn { HeaderText = "Thành tiền", DataPropertyName = nameof(Line.Amount), ReadOnly = true, FillWeight = 80, DefaultCellStyle = { Format = "N0" } });
+            new DataGridViewTextBoxColumn { HeaderText = "Thành tiền", DataPropertyName = nameof(Line.Amount), ReadOnly = true, FillWeight = 100, DefaultCellStyle = { Format = "N0" } });
         grid.DataSource = _lines;
 
         var tablesBox = new GroupBox { Text = "Sơ đồ bàn", Dock = DockStyle.Left, Width = 320 };
@@ -69,13 +75,13 @@ public class frmPOS : Form
         tablesBox.Controls.Add(pnlTables);
         tablesBox.Controls.Add(tableButtons);
 
-        var menuBox = new GroupBox { Text = "Thực đơn (nhấp đúp để thêm)", Dock = DockStyle.Left, Width = 280 };
-        menuBox.Controls.Add(lstMenu);
-        menuBox.Controls.Add(btnAdd);
+        var menuBox = new GroupBox { Text = "Thực đơn (bấm để thêm)", Dock = DockStyle.Left, Width = 360 };
+        menuBox.Controls.Add(pnlMenu);
+        menuBox.Controls.Add(txtSearch);
 
         var orderBox = new GroupBox { Text = "Order", Dock = DockStyle.Fill };
         var orderButtons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true };
-        orderButtons.Controls.AddRange([btnRemove, btnSubmit, btnDeliver, btnMerge, btnSplit, lblTotal]);
+        orderButtons.Controls.AddRange([btnMinus, btnPlus, btnRemove, btnSubmit, btnDeliver, btnMerge, btnSplit, btnPay, lblTotal]);
         orderBox.Controls.Add(grid);
         orderBox.Controls.Add(lblOrder);
         orderBox.Controls.Add(orderButtons);
@@ -85,7 +91,6 @@ public class frmPOS : Form
         Controls.Add(tablesBox);
         Controls.Add(lblNotice);
 
-        lstMenu.Format += (_, e) => { if (e.ListItem is MenuItemDto m) e.Value = $"{m.ProductName} — {m.Price:N0}đ"; };
         // Tải dữ liệu trước: hub chậm/mất kết nối không được chặn sơ đồ bàn.
         Load += async (_, _) => { await RunAsync(LoadAsync); await ConnectHubAsync(); };
         btnRefresh.Click += async (_, _) => { await RunAsync(RefreshAsync); await ConnectHubAsync(); };
@@ -101,8 +106,21 @@ public class frmPOS : Form
             await _hub.DisposeAsync();
         };
         btnTakeaway.Click += async (_, _) => await RunAsync(OpenTakeawayAsync);
-        btnAdd.Click += (_, _) => AddSelectedMenuItem();
-        lstMenu.DoubleClick += (_, _) => AddSelectedMenuItem();
+        btnPay.Visible = Program.Session.Role == "Cashier";
+        btnPay.Click += async (_, _) =>
+        {
+            if (_order is null || !ConfirmDiscard()) return;
+            var id = _order.Id;
+            using (var f = new frmPayment(Program.Api, id)) f.ShowDialog(this);
+            await RunAsync(async () =>
+            {
+                ShowOrder(await Program.Api.GetAsync<OrderDto>($"api/orders/{id}"));
+                await LoadTablesAsync();
+            });
+        };
+        txtSearch.TextChanged += (_, _) => FilterMenu();
+        btnPlus.Click += (_, _) => ChangeQuantity(+1);
+        btnMinus.Click += (_, _) => ChangeQuantity(-1);
         btnRemove.Click += (_, _) => RemoveSelected();
         btnSubmit.Click += async (_, _) => await RunAsync(SubmitAsync);
         grid.CellBeginEdit += (_, e) => e.Cancel = _lines[e.RowIndex].Status != OrderDetailStatus.Pending;
@@ -112,13 +130,26 @@ public class frmPOS : Form
             MessageBox.Show(this, "Số lượng phải là số nguyên lớn hơn 0.", Text);
             e.Cancel = true;
         };
-        FormClosing += (_, e) => e.Cancel = !ConfirmDiscard();
+        FormClosing += (_, e) => e.Cancel = Program.Session.IsLoggedIn && !ConfirmDiscard(); // hết phiên thì đóng luôn
         ShowOrder(null);
     }
 
     private async Task LoadAsync()
     {
-        lstMenu.DataSource = await Program.Api.GetAsync<List<MenuItemDto>>("api/menu") ?? [];
+        var menu = await Program.Api.GetAsync<List<MenuItemDto>>("api/menu") ?? [];
+        foreach (Control c in pnlMenu.Controls.Cast<Control>().ToList()) c.Dispose();
+        foreach (var m in menu)
+        {
+            var b = new Button
+            {
+                Text = $"{m.ProductName}\n{m.Price:N0}đ", Size = new Size(150, 80), Tag = m.ProductName,
+                FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Theme.Primary, Cursor = Cursors.Hand,
+            };
+            b.FlatAppearance.BorderColor = Theme.PrimaryLight;
+            b.Click += (_, _) => AddMenuItem(m);
+            pnlMenu.Controls.Add(b);
+        }
+        FilterMenu();
         await LoadTablesAsync();
     }
 
@@ -131,7 +162,7 @@ public class frmPOS : Form
             var b = new Button
             {
                 Text = t.Status == TableStatus.Serving ? $"{t.Name}\nĐang phục vụ" : $"{t.Name}\nTrống",
-                Size = new Size(92, 64),
+                Size = new Size(140, 64),
                 BackColor = t.Status == TableStatus.Serving ? Color.SandyBrown : Color.PaleGreen,
                 // Bàn đang mở trên form: viền đậm để biết đang sửa bàn nào.
                 FlatStyle = t.OpenOrderId is { } id && id == _order?.Id ? FlatStyle.Flat : FlatStyle.Standard,
@@ -182,17 +213,40 @@ public class frmPOS : Form
         lblOrder.Text = o is null ? "Chọn bàn hoặc Mang đi"
             : $"{o.TableName ?? "Mang đi"} — order lúc {o.OrderDate:HH:mm}" + (o.Status == OrderStatus.Open ? "" : " (đã đóng)");
         var editable = o?.Status == OrderStatus.Open;
-        btnAdd.Enabled = btnRemove.Enabled = btnSubmit.Enabled = editable;
+        pnlMenu.Enabled = btnPlus.Enabled = btnMinus.Enabled = btnRemove.Enabled = btnSubmit.Enabled = editable;
         btnDeliver.Enabled = editable && Program.Session.Role == "Waiter"; // API chỉ cho Phục vụ chuyển Đã giao
         btnMerge.Enabled = btnSplit.Enabled = editable && o!.TableId is not null;
+        btnPay.Enabled = editable;
         grid.ReadOnly = !editable;
         UpdateTotal();
     }
 
-    private void AddSelectedMenuItem()
+    private void FilterMenu()
     {
-        if (_order?.Status != OrderStatus.Open || lstMenu.SelectedItem is not MenuItemDto m) return;
-        _lines.Add(new Line { ProductId = m.ProductId, ProductName = m.ProductName, UnitPrice = m.Price, Status = OrderDetailStatus.Pending });
+        foreach (Control c in pnlMenu.Controls)
+            c.Visible = TextSearch.Matches((string)c.Tag!, txtSearch.Text);
+    }
+
+    private void AddMenuItem(MenuItemDto m)
+    {
+        if (_order?.Status != OrderStatus.Open) return;
+        var same = _lines.FirstOrDefault(l => l.Id is null && l.ProductId == m.ProductId && string.IsNullOrWhiteSpace(l.Note));
+        if (same is not null)
+        {
+            same.Quantity++;
+            _lines.ResetItem(_lines.IndexOf(same));
+        }
+        else
+            _lines.Add(new Line { ProductId = m.ProductId, ProductName = m.ProductName, UnitPrice = m.Price, Status = OrderDetailStatus.Pending });
+        _dirty = true;
+        UpdateTotal();
+    }
+
+    private void ChangeQuantity(int delta)
+    {
+        if (Selected is not { } l || l.Status != OrderDetailStatus.Pending || l.Quantity + delta < 1) return;
+        l.Quantity += delta;
+        _lines.ResetItem(_lines.IndexOf(l));
         _dirty = true;
         UpdateTotal();
     }
@@ -218,7 +272,8 @@ public class frmPOS : Form
             .Select(l => new { id = l.Id, productId = l.ProductId, quantity = l.Quantity, note = l.Note }).ToList();
         ShowOrder(await Program.Api.PutAsync<OrderDto>($"api/orders/{_order!.Id}/items", new { items }));
         ShowOrder(await Program.Api.PostAsync<OrderDto>($"api/orders/{_order!.Id}/submit"));
-        MessageBox.Show(this, "Đã gửi order xuống pha chế.", Text);
+        lblNotice.ForeColor = Color.DarkGreen;
+        lblNotice.Text = $"{DateTime.Now:HH:mm} Đã gửi order xuống pha chế.";
     }
 
     // Phục vụ bấm Đã giao cho món Bar đã làm Xong.

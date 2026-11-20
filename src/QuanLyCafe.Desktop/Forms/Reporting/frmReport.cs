@@ -29,6 +29,8 @@ public sealed class frmReport : Form
     {
         _api = api;
         Text = "Báo cáo";
+        Theme.Apply(this);
+        Theme.Shortcuts(this, _load);
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(1020, 680);
         MinimumSize = new Size(800, 500);
@@ -40,7 +42,10 @@ public sealed class frmReport : Form
         var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false };
         filters.Controls.AddRange([
             FilterLabel("Từ ngày"), _from, FilterLabel("Đến ngày"), _to,
-            FilterLabel("Doanh thu"), _groupBy, _load
+            FilterLabel("Doanh thu"), _groupBy, _load,
+            QuickRange("Hôm nay", DateTime.Today),
+            QuickRange("7 ngày", DateTime.Today.AddDays(-6)),
+            QuickRange("Tháng này", new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1))
         ]);
 
         AddColumn(_revenue, "Ngày / Tháng / Ca", nameof(RevenuePointDto.Label));
@@ -53,9 +58,9 @@ public sealed class frmReport : Form
 
         AddColumn(_inventory, "Nguyên liệu", nameof(InventoryReportDto.MaterialName));
         AddColumn(_inventory, "Đơn vị", nameof(InventoryReportDto.Unit));
-        AddColumn(_inventory, "Tồn hiện tại", nameof(InventoryReportDto.StockQuantity), "0.###");
-        AddColumn(_inventory, "Mức tối thiểu", nameof(InventoryReportDto.MinQuantity), "0.###");
-        AddColumn(_inventory, "Hao hụt trong kỳ", nameof(InventoryReportDto.WastedQuantity), "0.###");
+        AddColumn(_inventory, "Tồn hiện tại", nameof(InventoryReportDto.StockQuantity), "#,0.###");
+        AddColumn(_inventory, "Mức tối thiểu", nameof(InventoryReportDto.MinQuantity), "#,0.###");
+        AddColumn(_inventory, "Hao hụt trong kỳ", nameof(InventoryReportDto.WastedQuantity), "#,0.###");
 
         var revenueLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         revenueLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
@@ -186,6 +191,18 @@ public sealed class frmReport : Form
         var tab = new TabPage(title) { Padding = new Padding(6) };
         tab.Controls.Add(content);
         _tabs.TabPages.Add(tab);
+    }
+
+    private Button QuickRange(string text, DateTime from)
+    {
+        var b = new Button { Text = text, AutoSize = true };
+        b.Click += async (_, _) =>
+        {
+            _from.Value = from;
+            _to.Value = DateTime.Today;
+            await LoadReportsAsync();
+        };
+        return b;
     }
 
     private static Label FilterLabel(string text) =>

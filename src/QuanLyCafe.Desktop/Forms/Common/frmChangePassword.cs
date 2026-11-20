@@ -14,6 +14,8 @@ public class frmChangePassword : Form
     {
         _auth = auth;
         Text = "Đổi mật khẩu";
+        Theme.Apply(this);
+        Theme.Shortcuts(this);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;

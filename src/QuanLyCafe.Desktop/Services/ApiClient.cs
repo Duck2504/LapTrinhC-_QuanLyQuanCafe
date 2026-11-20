@@ -76,6 +76,8 @@ public class ApiClient
             SessionExpired?.Invoke();
             code = "ERR-AUTH-003";
         }
+        if ((int)res.StatusCode == 403)
+            detail ??= "Bạn không có quyền thực hiện thao tác này.";
         throw new ApiException((int)res.StatusCode, code, detail ?? res.ReasonPhrase ?? "Lỗi");
     }
 }

@@ -28,6 +28,8 @@ public class frmStaff : Form
     public frmStaff()
     {
         Text = "Quản lý nhân viên & phân quyền";
+        Theme.Apply(this);
+        Theme.Shortcuts(this);
         Size = new Size(900, 500);
         StartPosition = FormStartPosition.CenterParent;
 

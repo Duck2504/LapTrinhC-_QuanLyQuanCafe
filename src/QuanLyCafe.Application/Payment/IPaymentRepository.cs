@@ -15,4 +15,4 @@ public interface IPaymentRepository
     Task SaveAsync(IEnumerable<StockMovement> movements, CancellationToken ct);
 }
 
-public record PaymentPreview(OrderStatus Status, decimal TotalAmount, bool HasItems);
+public record PaymentPreview(OrderStatus Status, decimal TotalAmount, bool HasItems, bool HasUnfinishedItems);
