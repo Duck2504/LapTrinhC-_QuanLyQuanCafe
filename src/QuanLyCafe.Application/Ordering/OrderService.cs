@@ -86,6 +86,9 @@ public class OrderService(IOrderRepository orders, IInventoryService inventory, 
         if (newItems.Any(i => !products.TryGetValue(i.ProductId, out var p) || !p.IsActive))
             throw new ValidationException(ErrorCodes.ValidationFailed, "Có món không tồn tại hoặc đã ngừng bán.");
 
+        var oldPending = order.OrderDetails.Where(d => d.Status == OrderDetailStatus.Pending)
+            .GroupBy(d => d.ProductID).ToDictionary(g => g.Key, g => g.Sum(d => d.Quantity));
+
         foreach (var i in existing)
         {
             var d = byId[i.Id!.Value];
@@ -105,6 +108,14 @@ public class OrderService(IOrderRepository orders, IInventoryService inventory, 
             UnitPrice = products[i.ProductId].Price, // giá chép tại thời điểm gọi món
             Note = string.IsNullOrWhiteSpace(i.Note) ? null : i.Note.Trim(),
         }).ToList();
+
+        // Pending = đã gửi Bar, nên kiểm kho TRƯỚC khi lưu: thiếu nguyên liệu thì không món nào được ghi.
+        // Chỉ kiểm sản phẩm có tổng số lượng tăng, để xóa/giảm món vẫn làm được khi đang hết nguyên liệu.
+        var increased = kept.Where(d => d.Status == OrderDetailStatus.Pending).Concat(added)
+            .GroupBy(d => d.ProductID).Select(g => new StockCheckItem(g.Key, g.Sum(d => d.Quantity)))
+            .Where(c => c.Quantity > oldPending.GetValueOrDefault(c.ProductId)).ToList();
+        if (increased.Count > 0)
+            await inventory.CheckStockAsync(increased, ct);
 
         orders.RemoveDetails(removed);
         orders.AddDetails(added);
