@@ -11,6 +11,10 @@ public record OrderItemRequest(Guid ProductId, int Quantity, string? Note, Guid?
 
 public record UpdateOrderItemsRequest(List<OrderItemRequest>? Items);
 
+// Web (khách quét QR): POST /api/public/tables/{id}/orders.
+public record GuestOrderRequest(List<OrderItemRequest>? Items);
+public record GuestTableDto(Guid Id, string Name, OrderDto? OpenOrder);
+
 public record OrderItemDto(Guid Id, Guid ProductId, string ProductName, int Quantity, decimal UnitPrice,
     OrderDetailStatus Status, string? Note);
 

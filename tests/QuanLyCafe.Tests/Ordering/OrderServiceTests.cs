@@ -399,6 +399,60 @@ public class OrderServiceTests
         Assert.Equal(("Cà phê sữa", "Bàn 1"), (c.ProductName, c.TableName));
     }
 
+    // ---- Web: khách quét QR gọi món ----
+
+    private Task<OrderDto> KhachGoi(int qty = 2) => _service.GuestOrderAsync(_ban1.TableID,
+        new GuestOrderRequest([new OrderItemRequest(_cafeSua.ProductID, qty, "ít đá")]));
+
+    [Fact]
+    public async Task Khach_goi_mon_ban_trong_thi_mo_order_khong_nhan_vien_va_gui_bar()
+    {
+        var order = await KhachGoi();
+
+        var saved = Assert.Single(_repo.Orders);
+        Assert.Null(saved.UserID);
+        Assert.Equal(TableStatus.Serving, _ban1.Status);
+        Assert.Equal(50000, order.TotalAmount);
+        var ticket = Assert.Single(_notifier.Tickets);
+        Assert.Equal("Bàn 1", ticket.TableName);
+    }
+
+    [Fact]
+    public async Task Khach_goi_them_thi_cong_vao_order_dang_mo_va_giu_mon_cu()
+    {
+        var first = await KhachGoi(1);
+        _repo.Orders[0].OrderDetails[0].Status = OrderDetailStatus.Preparing; // món cũ đang pha vẫn phải giữ
+
+        var order = await KhachGoi(2);
+
+        Assert.Equal(first.Id, order.Id);
+        Assert.Single(_repo.Orders);
+        Assert.Equal([1, 2], order.Items.Select(i => i.Quantity).Order());
+        Assert.Equal(75000, order.TotalAmount);
+        Assert.Equal(2, _notifier.Tickets.Count); // mỗi lần gọi đều báo Bar
+    }
+
+    [Fact]
+    public async Task Khach_goi_mon_het_nguyen_lieu_thi_khong_de_lai_order_rong()
+    {
+        _inventory.Error = new BusinessRuleException(ErrorCodes.StockInsufficient, "Thiếu sữa");
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => KhachGoi());
+
+        Assert.Equal(OrderStatus.Cancelled, Assert.Single(_repo.Orders).Status);
+        Assert.Equal(TableStatus.Empty, _ban1.Status);
+        Assert.Empty(_notifier.Tickets);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(51)]
+    public async Task Khach_goi_so_luong_ngoai_1_den_50_tra_400(int qty)
+    {
+        await Assert.ThrowsAsync<ValidationException>(() => KhachGoi(qty));
+        Assert.Empty(_repo.Orders);
+    }
+
     private class FakeInventory : IInventoryService
     {
         public List<StockCheckItem> Checked { get; } = [];

@@ -18,8 +18,9 @@ public class Order
     public Guid? TableID { get; set; }
     public Table? Table { get; set; }
 
-    public Guid UserID { get; set; }
-    public User User { get; set; } = null!;
+    // NULL = khách tự gọi món qua QR trên Web.
+    public Guid? UserID { get; set; }
+    public User? User { get; set; }
 
     public Guid? CashierID { get; set; }
     public User? Cashier { get; set; }
