@@ -1,4 +1,4 @@
--- Dữ liệu demo: 10 bàn, 12 nguyên liệu, 15 món, BOM cho mọi món.
+-- Dữ liệu demo: 10 bàn, 12 nguyên liệu, 4 danh mục, 15 món (có mô tả), BOM cho mọi món.
 -- Chạy SAU khi API đã khởi động một lần (migration đã tạo bảng). Chạy lại nhiều lần không bị trùng.
 --   sqlcmd -S localhost -d QuanLyCafe -E -i scripts/seed-demo.sql
 --   Docker: sqlcmd -S localhost,1433 -U sa -P "<SA_PASSWORD>" -C -d QuanLyCafe -i scripts/seed-demo.sql
@@ -43,6 +43,35 @@ FROM (VALUES
     (N'Cacao đá',          37000), (N'Nước cam',          35000), (N'Chanh tuyết',       35000)
 ) v(Name, Price)
 WHERE NOT EXISTS (SELECT 1 FROM Products p WHERE p.ProductName = v.Name);
+
+-- Danh mục + gán danh mục, mô tả cho món (chỉ điền chỗ còn trống, không ghi đè dữ liệu Manager đã sửa)
+INSERT INTO Categories (CategoryID, CategoryName, IsActive)
+SELECT NEWID(), v.Name, 1
+FROM (VALUES (N'Cà phê'), (N'Trà'), (N'Đá xay & Cacao'), (N'Nước ép')) v(Name)
+WHERE NOT EXISTS (SELECT 1 FROM Categories c WHERE c.CategoryName = v.Name);
+
+UPDATE p SET
+    CategoryID  = COALESCE(p.CategoryID, c.CategoryID),
+    Description = COALESCE(p.Description, v.Description)
+FROM Products p
+JOIN (VALUES
+    (N'Cà phê đen',        N'Cà phê',          N'Robusta rang đậm pha phin, đắng thơm, hậu ngọt nhẹ.'),
+    (N'Cà phê sữa',        N'Cà phê',          N'Cà phê phin hòa sữa đặc, vị truyền thống Sài Gòn.'),
+    (N'Bạc xỉu',           N'Cà phê',          N'Nhiều sữa, ít cà phê, béo nhẹ dễ uống.'),
+    (N'Cà phê sữa tươi',   N'Cà phê',          N'Cà phê phin với sữa tươi thanh mát.'),
+    (N'Latte',             N'Cà phê',          N'Espresso và sữa tươi đánh nóng, lớp bọt mịn.'),
+    (N'Cappuccino',        N'Cà phê',          N'Espresso, sữa nóng và lớp bọt sữa dày.'),
+    (N'Americano',         N'Cà phê',          N'Espresso pha loãng với nước, uống nóng hoặc đá.'),
+    (N'Trà đào',           N'Trà',             N'Trà đen ủ lạnh với đào ngâm giòn ngọt.'),
+    (N'Trà chanh',         N'Trà',             N'Trà đen, chanh tươi, chua ngọt giải nhiệt.'),
+    (N'Trà sữa trân châu', N'Trà',             N'Trà đen sữa tươi kèm trân châu đường đen.'),
+    (N'Matcha latte',      N'Trà',             N'Matcha Nhật pha sữa tươi, thơm vị trà xanh.'),
+    (N'Cacao nóng',        N'Đá xay & Cacao',  N'Cacao nguyên chất khuấy sữa nóng.'),
+    (N'Cacao đá',          N'Đá xay & Cacao',  N'Cacao sữa lạnh, đậm vị sô-cô-la.'),
+    (N'Nước cam',          N'Nước ép',         N'Cam vắt tươi mỗi ly, không thêm hương liệu.'),
+    (N'Chanh tuyết',       N'Nước ép',         N'Chanh xay đá mịn, chua ngọt mát lạnh.')
+) v(Product, Category, Description) ON p.ProductName = v.Product
+JOIN Categories c ON c.CategoryName = v.Category;
 
 -- BOM: định mức nguyên liệu cho 1 ly
 INSERT INTO Product_BOMs (ProductID, MaterialID, QuantityRequired)
