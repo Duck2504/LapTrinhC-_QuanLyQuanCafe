@@ -14,6 +14,8 @@ public class frmStaff : Form
         SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoGenerateColumns = false,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, RowHeadersVisible = false,
     };
+    private readonly TextBox txtSearch = new() { Dock = DockStyle.Top, PlaceholderText = "Tìm theo tên đăng nhập / họ tên..." };
+    private List<UserDto> _users = [];
     private readonly TextBox txtUsername = new() { Width = 220 };
     private readonly TextBox txtFullName = new() { Width = 220 };
     private readonly ComboBox cboRole = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = "Name", ValueMember = "Id" };
@@ -51,6 +53,8 @@ public class frmStaff : Form
 
         Controls.Add(grid);
         Controls.Add(fields);
+        Controls.Add(txtSearch);
+        txtSearch.TextChanged += (_, _) => ApplyFilter(Selected?.Id);
 
         Load += async (_, _) => await RunAsync(LoadAsync);
         grid.SelectionChanged += (_, _) => ShowSelected();
@@ -74,8 +78,14 @@ public class frmStaff : Form
 
     private async Task ReloadUsersAsync(Guid? selectId)
     {
-        var users = await Program.Api.GetAsync<List<UserDto>>("api/users") ?? [];
-        grid.DataSource = users;
+        _users = await Program.Api.GetAsync<List<UserDto>>("api/users") ?? [];
+        ApplyFilter(selectId);
+    }
+
+    private void ApplyFilter(Guid? selectId)
+    {
+        grid.DataSource = _users.Where(u => TextSearch.Matches(u.Username, txtSearch.Text)
+                                            || TextSearch.Matches(u.FullName, txtSearch.Text)).ToList();
         grid.ClearSelection();
         var row = grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r => ((UserDto)r.DataBoundItem!).Id == selectId);
         if (row is not null) grid.CurrentCell = row.Cells[0];
