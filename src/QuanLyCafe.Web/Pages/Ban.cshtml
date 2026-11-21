@@ -1,0 +1,95 @@
+@page "/Ban/{id:guid}"
+@model BanModel
+@{
+    ViewData["Title"] = $"Gọi món – {Model.Table.Name}";
+    var order = Model.Table.OpenOrder;
+    var groups = Model.Menu.GroupBy(p => p.CategoryName ?? "Món khác").ToList();
+    var i = 0;
+}
+
+<section class="wrap section table-head">
+    <p class="eyebrow">Bạn đang ngồi tại</p>
+    <h1 class="page-title">@Model.Table.Name</h1>
+
+    @if (Model.Success is { } ok)
+    {
+        <div class="alert alert-ok" role="status">@ok</div>
+    }
+    @if (Model.Error is { } err)
+    {
+        <div class="alert alert-err" role="alert">@err</div>
+    }
+
+    @if (order is { Items.Count: > 0 })
+    {
+        <details class="current" open>
+            <summary>
+                <span>Món bàn đã gọi (@order.Items.Sum(x => x.Quantity))</span>
+                <span class="price">@Fmt.Vnd(order.TotalAmount)</span>
+            </summary>
+            <ul class="current-list">
+                @foreach (var it in order.Items)
+                {
+                    <li>
+                        <span>@it.Quantity × @it.ProductName@(it.Note is { } n ? $" ({n})" : "")</span>
+                        <span class="status s@(it.Status)">@Fmt.ItemStatus(it.Status)</span>
+                    </li>
+                }
+            </ul>
+            <a class="btn btn-ghost btn-sm" href="/Ban/@Model.Table.Id">Cập nhật trạng thái</a>
+            <p class="muted small">Thanh toán tại quầy thu ngân khi bạn ra về.</p>
+        </details>
+    }
+</section>
+
+<form method="post" class="wrap order-form" id="order-form">
+    <div class="sticky-tools">
+        <input type="search" id="filter" placeholder="Tìm món…" aria-label="Lọc món" />
+        <nav class="chips" aria-label="Danh mục">
+            @for (var g = 0; g < groups.Count; g++)
+            {
+                <a class="chip" href="#g-@g">@groups[g].Key</a>
+            }
+        </nav>
+    </div>
+
+    @for (var g = 0; g < groups.Count; g++)
+    {
+        <section class="menu-group" id="g-@g">
+            <h2>@groups[g].Key</h2>
+            @foreach (var p in groups[g])
+            {
+                var qty = Model.PostedQuantity(p.ProductId);
+                <div class="line" id="p-@p.ProductId" data-name="@p.ProductName" data-price="@p.Price.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                    <partial name="_ProductImage" model="p" />
+                    <div class="line-info">
+                        <a href="/Product/@p.ProductId"><b>@p.ProductName</b></a>
+                        <span class="price">@Fmt.Vnd(p.Price)</span>
+                        <input type="hidden" name="Lines[@i].ProductId" value="@p.ProductId" />
+                        <input class="line-note" type="text" name="Lines[@i].Note" value="@Model.PostedNote(p.ProductId)" maxlength="200" placeholder="Ghi chú (ít đá, ít ngọt…)" aria-label="Ghi chú cho @p.ProductName" />
+                    </div>
+                    <div class="stepper">
+                        <button type="button" class="step" data-step="-1" aria-label="Bớt @p.ProductName">−</button>
+                        <input type="number" name="Lines[@i].Quantity" value="@qty" min="0" max="50" inputmode="numeric" aria-label="Số lượng @p.ProductName" />
+                        <button type="button" class="step" data-step="1" aria-label="Thêm @p.ProductName">+</button>
+                    </div>
+                </div>
+                i++;
+            }
+        </section>
+    }
+
+    @if (Model.Menu.Count == 0)
+    {
+        <p class="empty">Thực đơn đang được cập nhật.</p>
+    }
+
+    <div class="cart-bar">
+        <div><span id="cart-count">0</span> món · <b id="cart-total">0 ₫</b></div>
+        <button type="submit" class="btn">Gửi order</button>
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/js/order.js" asp-append-version="true"></script>
+}

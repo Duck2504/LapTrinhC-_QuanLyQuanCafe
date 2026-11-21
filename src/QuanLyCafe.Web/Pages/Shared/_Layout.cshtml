@@ -1,0 +1,54 @@
+@inject IConfiguration Config
+@{
+    var siteName = Config["Site:Name"] ?? "Quán Cafe";
+    var path = Context.Request.Path.Value ?? "/";
+    // Bàn khách vừa quét QR (cookie đặt ở trang /Ban): hiện lối tắt quay lại gọi món.
+    var tableId = Guid.TryParse(Context.Request.Cookies["table"], out var t) ? t : (Guid?)null;
+    string Active(string p) => (p == "/" ? path == "/" : path.StartsWith(p, StringComparison.OrdinalIgnoreCase)) ? "active" : "";
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#6F4E37" />
+    <title>@(ViewData["Title"] is string title ? $"{title} · {siteName}" : siteName)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Lora:wght@600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="wrap topbar-inner">
+            <a class="brand" href="/">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13v5a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6V8Zm13 1h1.5a2.5 2.5 0 0 1 0 5H17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M8 2.5c0 1.2 1 1.3 1 2.5M12 2.5c0 1.2 1 1.3 1 2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                <span>@siteName</span>
+            </a>
+            <nav class="nav" aria-label="Menu chính">
+                <a class="@Active("/")" href="/">Trang chủ</a>
+                <a class="@Active("/Menu")" href="/Menu">Thực đơn</a>
+                @if (tableId is { } tid)
+                {
+                    <a class="nav-cta @Active("/Ban")" href="/Ban/@tid">Gọi món tại bàn</a>
+                }
+            </nav>
+            <form class="search" action="/Menu" method="get" role="search">
+                <input type="search" name="q" placeholder="Tìm món…" aria-label="Tìm món" value="@Context.Request.Query["q"]" />
+            </form>
+        </div>
+    </header>
+
+    <main>
+        @RenderBody()
+    </main>
+
+    <footer class="footer">
+        <div class="wrap">
+            <strong>@siteName</strong>
+            <span>Mở cửa 6:00 – 22:00 mỗi ngày · Quét mã QR trên bàn để gọi món</span>
+        </div>
+    </footer>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

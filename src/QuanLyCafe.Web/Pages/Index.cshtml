@@ -1,0 +1,52 @@
+@page
+@model IndexModel
+
+<section class="hero">
+    <div class="wrap hero-inner">
+        <div>
+            <p class="eyebrow">Rang mỗi sáng · Pha theo ly</p>
+            <h1>Một ly cà phê ngon,<br />gọi ngay tại bàn.</h1>
+            <p class="lead">Xem thực đơn @Model.MenuCount món, tìm món bạn thích và gọi món trực tiếp từ điện thoại. Không cần chờ phục vụ.</p>
+            <form class="hero-search" action="/Menu" method="get" role="search">
+                <input type="search" name="q" placeholder="Bạn muốn uống gì? Ví dụ: cà phê sữa" aria-label="Tìm món" />
+                <button type="submit" class="btn">Tìm món</button>
+            </form>
+        </div>
+        <ol class="steps" aria-label="Cách gọi món tại bàn">
+            <li><b>Quét mã QR</b><span>Mã dán trên mỗi bàn</span></li>
+            <li><b>Chọn món</b><span>Thêm số lượng, ghi chú ít đá, ít ngọt…</span></li>
+            <li><b>Gửi order</b><span>Quầy pha chế nhận ngay, bạn theo dõi món trên màn hình</span></li>
+        </ol>
+    </div>
+</section>
+
+<section class="wrap section">
+    <h2>Danh mục</h2>
+    <div class="chips">
+        <a class="chip" href="/Menu">Tất cả</a>
+        @foreach (var c in Model.Categories)
+        {
+            <a class="chip" href="/Menu?cat=@c.CategoryId">@c.CategoryName</a>
+        }
+    </div>
+</section>
+
+<section class="wrap section">
+    <div class="section-head">
+        <h2>Món trong thực đơn</h2>
+        <a href="/Menu">Xem tất cả →</a>
+    </div>
+    @if (Model.Featured.Count == 0)
+    {
+        <p class="empty">Thực đơn đang được cập nhật.</p>
+    }
+    else
+    {
+        <div class="grid">
+            @foreach (var p in Model.Featured)
+            {
+                <partial name="_ProductCard" model="p" />
+            }
+        </div>
+    }
+</section>

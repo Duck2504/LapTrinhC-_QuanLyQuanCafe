@@ -37,6 +37,20 @@ services:
       - apilogs:/app/logs
     restart: unless-stopped
 
+  # Trang Web khách hàng (thực đơn, gọi món qua QR): chỉ gọi API, không nối thẳng DB.
+  web:
+    build:
+      context: .
+      dockerfile: src/QuanLyCafe.Web/Dockerfile
+    image: quanlycafe-web
+    depends_on: [api]
+    environment:
+      Api__BaseUrl: "http://api:8080/"
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${WEB_PORT:-5080}:8080"
+    restart: unless-stopped
+
   # Tùy chọn: HTTPS tự động (Let's Encrypt) khi deploy lên VPS có tên miền trỏ về.
   caddy:
     image: caddy:2

@@ -1,0 +1,51 @@
+@page "/Product/{id:guid}"
+@model ProductModel
+@{
+    ViewData["Title"] = Model.Item.ProductName;
+}
+
+<section class="wrap section">
+    <nav class="crumbs" aria-label="Đường dẫn">
+        <a href="/Menu">Thực đơn</a>
+        @if (Model.Item.CategoryId is { } cat)
+        {
+            <span>/</span><a href="/Menu?cat=@cat">@Model.Item.CategoryName</a>
+        }
+    </nav>
+
+    <article class="detail">
+        <div class="detail-media">
+            <partial name="_ProductImage" model="Model.Item" />
+        </div>
+        <div class="detail-body">
+            @if (Model.Item.CategoryName is { } name)
+            {
+                <span class="tag">@name</span>
+            }
+            <h1>@Model.Item.ProductName</h1>
+            <p class="price big">@Fmt.Vnd(Model.Item.Price)</p>
+            <p class="desc">@(string.IsNullOrEmpty(Model.Item.Description) ? "Món đang được quán cập nhật mô tả." : Model.Item.Description)</p>
+            @if (Model.TableId is { } tid)
+            {
+                <a class="btn" href="/Ban/@tid#p-@Model.Item.ProductId">Gọi món này tại bàn</a>
+            }
+            else
+            {
+                <p class="note">Bạn đang ở quán? Quét mã QR trên bàn để gọi món này.</p>
+            }
+        </div>
+    </article>
+</section>
+
+@if (Model.Related.Count > 0)
+{
+    <section class="wrap section">
+        <h2>Cùng danh mục</h2>
+        <div class="grid">
+            @foreach (var p in Model.Related)
+            {
+                <partial name="_ProductCard" model="p" />
+            }
+        </div>
+    </section>
+}

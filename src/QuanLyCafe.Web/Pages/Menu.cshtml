@@ -1,0 +1,50 @@
+@page
+@model MenuModel
+@{
+    ViewData["Title"] = "Thực đơn";
+    var catName = Model.Categories.FirstOrDefault(c => c.CategoryId == Model.Cat)?.CategoryName;
+    string Link(Guid? cat) => "/Menu" + QueryString.Create(new Dictionary<string, string?>
+        { ["q"] = string.IsNullOrWhiteSpace(Model.Q) ? null : Model.Q, ["cat"] = cat?.ToString() });
+}
+
+<section class="wrap section">
+    <h1 class="page-title">@(catName ?? "Thực đơn")</h1>
+
+    <form class="filter" method="get" role="search">
+        <input type="search" name="q" value="@Model.Q" placeholder="Tìm theo tên món (gõ không dấu cũng được)" aria-label="Tìm món" />
+        @if (Model.Cat is { } cat)
+        {
+            <input type="hidden" name="cat" value="@cat" />
+        }
+        <button type="submit" class="btn">Tìm</button>
+    </form>
+
+    <div class="chips" aria-label="Lọc theo danh mục">
+        <a class="chip @(Model.Cat is null ? "on" : "")" href="@Link(null)">Tất cả</a>
+        @foreach (var c in Model.Categories)
+        {
+            <a class="chip @(c.CategoryId == Model.Cat ? "on" : "")" href="@Link(c.CategoryId)">@c.CategoryName</a>
+        }
+    </div>
+
+    <p class="muted result-count">
+        @Model.Items.Count món@(string.IsNullOrWhiteSpace(Model.Q) ? "" : $" khớp “{Model.Q}”")
+    </p>
+
+    @if (Model.Items.Count == 0)
+    {
+        <div class="empty">
+            <p>Không tìm thấy món nào.</p>
+            <a class="btn btn-ghost" href="/Menu">Xem toàn bộ thực đơn</a>
+        </div>
+    }
+    else
+    {
+        <div class="grid">
+            @foreach (var p in Model.Items)
+            {
+                <partial name="_ProductCard" model="p" />
+            }
+        </div>
+    }
+</section>

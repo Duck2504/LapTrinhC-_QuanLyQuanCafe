@@ -1,0 +1,16 @@
+@model MenuItemDto
+<a class="card" href="/Product/@Model.ProductId">
+    <partial name="_ProductImage" model="Model" />
+    <div class="card-body">
+        @if (Model.CategoryName is { } cat)
+        {
+            <span class="tag">@cat</span>
+        }
+        <h3>@Model.ProductName</h3>
+        @if (!string.IsNullOrEmpty(Model.Description))
+        {
+            <p class="muted clamp">@Model.Description</p>
+        }
+        <span class="price">@Fmt.Vnd(Model.Price)</span>
+    </div>
+</a>
