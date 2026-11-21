@@ -7,12 +7,13 @@ public class ProductRepository(AppDbContext db) : IProductRepository
 {
     public Task<List<Product>> GetAllAsync(bool onlyActive, CancellationToken ct) =>
         db.Products.AsNoTracking()
+            .Include(p => p.Category)
             .Where(p => !onlyActive || p.IsActive)
             .OrderBy(p => p.ProductName)
             .ToListAsync(ct);
 
     public Task<Product?> GetByIdAsync(Guid id, CancellationToken ct) =>
-        db.Products.FirstOrDefaultAsync(p => p.ProductID == id, ct);
+        db.Products.Include(p => p.Category).FirstOrDefaultAsync(p => p.ProductID == id, ct);
 
     public async Task AddAsync(Product p, CancellationToken ct) =>
         await db.Products.AddAsync(p, ct);

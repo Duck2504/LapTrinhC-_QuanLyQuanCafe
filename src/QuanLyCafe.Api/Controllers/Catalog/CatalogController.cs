@@ -48,4 +48,18 @@ public class CatalogController(CatalogService catalog) : ControllerBase
         Guid id, SaveProductRequest request, CancellationToken ct)
         => catalog.UpdateAsync(id, request, ct);
 
+    [HttpGet("categories")]
+    [Authorize(Roles = "Manager")]
+    public Task<List<CategoryDto>> GetCategories(CancellationToken ct)
+        => catalog.GetCategoriesAsync(onlyActive: false, ct);
+
+    [HttpPost("categories")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> CreateCategory(SaveCategoryRequest request, CancellationToken ct)
+        => StatusCode(StatusCodes.Status201Created, await catalog.CreateCategoryAsync(request, ct));
+
+    [HttpPut("categories/{id:guid}")]
+    [Authorize(Roles = "Manager")]
+    public Task<CategoryDto> UpdateCategory(Guid id, SaveCategoryRequest request, CancellationToken ct)
+        => catalog.UpdateCategoryAsync(id, request, ct);
 }
