@@ -87,10 +87,12 @@ public class frmMain : Form
         if (manager)
         {
             Add("🍰", "Sản phẩm", "Thực đơn và giá bán", () => new frmProducts(Program.Api));         // SCR_007
+            Add("🗂", "Danh mục", "Nhóm món trên thực đơn", () => new frmCategories(Program.Api));
             Add("⚖", "Định lượng BOM", "Công thức nguyên liệu", () => new frmBom(Program.Api));       // SCR_008
             Add("📦", "Kho", "Nhập, xuất, kiểm kê", () => new frmInventory(Program.Api));              // SCR_009
             Add("👥", "Nhân viên", "Tài khoản và phân quyền", () => new frmStaff());                   // SCR_010
             Add("📊", "Báo cáo", "Doanh thu, món bán chạy", () => new frmReport(Program.Api));         // SCR_011
+            Add("🔳", "QR gọi món", "In mã QR đặt tại bàn", () => new frmTableQr(Program.Api));
         }
 
         var account = new ToolStripMenuItem("Tài khoản");

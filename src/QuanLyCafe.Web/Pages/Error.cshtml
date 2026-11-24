@@ -1,0 +1,15 @@
+@page
+@* Trang lỗi được chạy lại cả khi request gốc là POST (gửi order) *@
+@attribute [Microsoft.AspNetCore.Mvc.IgnoreAntiforgeryToken]
+@{
+    var code = Request.Query["code"].ToString();
+    var notFound = code == "404";
+    ViewData["Title"] = notFound ? "Không tìm thấy" : "Có lỗi";
+}
+<section class="wrap section empty">
+    <h1 class="page-title">@(notFound ? "Không tìm thấy trang" : "Hệ thống đang bận")</h1>
+    <p>@(notFound
+        ? "Món hoặc bàn bạn tìm không còn tồn tại. Nếu bạn quét mã QR trên bàn, vui lòng báo nhân viên."
+        : "Chưa kết nối được tới quán. Bạn vui lòng thử lại sau ít phút.")</p>
+    <a class="btn" href="/">Về trang chủ</a>
+</section>

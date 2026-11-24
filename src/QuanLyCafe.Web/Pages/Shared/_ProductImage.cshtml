@@ -1,0 +1,10 @@
+@model MenuItemDto
+@if (!string.IsNullOrEmpty(Model.ImageUrl))
+{
+    <img class="thumb" src="@Model.ImageUrl" alt="@Model.ProductName" loading="lazy" />
+}
+else
+{
+    @* Chưa có ảnh: khối màu với chữ cái đầu tên món *@
+    <div class="thumb thumb-empty" aria-hidden="true">@Model.ProductName[..1].ToUpperInvariant()</div>
+}

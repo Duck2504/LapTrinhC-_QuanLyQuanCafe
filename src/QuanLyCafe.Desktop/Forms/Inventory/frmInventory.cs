@@ -18,6 +18,9 @@ public class frmInventory : Form
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
     };
 
+    private readonly TextBox _search = new() { Dock = DockStyle.Top, PlaceholderText = "Tìm nguyên liệu..." };
+    private List<MaterialDto> _materials = [];
+
     public frmInventory(ApiClient api)
     {
         _api = api;
@@ -82,6 +85,8 @@ public class frmInventory : Form
 
         var tab = new TabPage("Tồn kho");
         tab.Controls.Add(_grid);
+        tab.Controls.Add(_search);
+        _search.TextChanged += (_, _) => ApplyFilter();
         _tabs.TabPages.Add(tab);
     }
 
@@ -189,13 +194,17 @@ public class frmInventory : Form
         }
     }
 
+    private void ApplyFilter() =>
+        _grid.DataSource = _materials.Where(m => TextSearch.Matches(m.MaterialName, _search.Text)).ToList();
+
     private async Task LoadStockAsync()
     {
         var materials = await _api.GetAsync<List<MaterialDto>>("/api/materials");
         if (IsDisposed)
             return;
 
-        _grid.DataSource = materials;
+        _materials = materials ?? [];
+        ApplyFilter();
 
         foreach (var picker in _materialPickers)
         {

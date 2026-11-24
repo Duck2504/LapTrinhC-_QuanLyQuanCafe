@@ -12,6 +12,7 @@ public static class CatalogAndInventoryRegistration
         this IServiceCollection services)
     {
         services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<ICategoryRepository, QuanLyCafe.Infrastructure.Repositories.Catalog.CategoryRepository>();
         services.AddScoped<IMaterialRepository, MaterialRepository>();
         services.AddScoped<CatalogService>();
         services.AddScoped<InventoryService>();

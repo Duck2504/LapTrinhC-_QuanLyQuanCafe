@@ -9,13 +9,20 @@ public class frmProducts : Form
     private readonly ApiClient _api;
     private readonly BindingList<ProductDto> _items = new();
     private List<ProductDto> _all = [];
-    private readonly TextBox txtSearch = new() { Dock = DockStyle.Top, PlaceholderText = "Tìm sản phẩm..." };
+    private readonly TextBox txtSearch = new() { Dock = DockStyle.Fill, PlaceholderText = "Tìm sản phẩm..." };
+    private readonly ComboBox cboFilter = new() { Dock = DockStyle.Right, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList };
+    private static readonly CategoryDto NoCategory = new(Guid.Empty, "(Không có)", true);
+    private static readonly CategoryDto AllCategories = new(Guid.Empty, "(Tất cả danh mục)", true);
+    private List<CategoryDto> _activeCategories = [];
     private Guid? _editingId;   // null = chế độ "tạo"
 
     private readonly DataGridView dgvProducts = new();
     private readonly TextBox txtName = new();
     private readonly NumericUpDown numPrice = new();
     private readonly CheckBox chkActive = new();
+    private readonly ComboBox cboCategory = new() { DropDownStyle = ComboBoxStyle.DropDownList, DisplayMember = nameof(CategoryDto.CategoryName) };
+    private readonly TextBox txtImageUrl = new() { MaxLength = 300, PlaceholderText = "https://... hoặc /images/..." };
+    private readonly TextBox txtDescription = new() { Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 500 };
     private readonly Button btnNew = new(), btnSave = new(), btnDelete = new(),
                             btnRefresh = new(), btnBom = new();
 
@@ -32,7 +39,7 @@ public class frmProducts : Form
         Theme.Apply(this);
         Theme.Shortcuts(this, btnRefresh);
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(640, 512);
+        ClientSize = new Size(820, 545);
 
         // Grid
         dgvProducts.Dock = DockStyle.Top;
@@ -48,6 +55,8 @@ public class frmProducts : Form
         dgvProducts.Columns.Add(new DataGridViewTextBoxColumn
             { Name = "colPrice", HeaderText = "Giá", DataPropertyName = "Price",
               DefaultCellStyle = { Format = "N0" } });
+        dgvProducts.Columns.Add(new DataGridViewTextBoxColumn
+            { Name = "colCategory", HeaderText = "Danh mục", DataPropertyName = "CategoryName" });
         dgvProducts.Columns.Add(new DataGridViewTextBoxColumn
             { Name = "colStatus", HeaderText = "Trạng thái", DataPropertyName = "IsActive" });
         dgvProducts.DataSource = _items;
@@ -70,9 +79,16 @@ public class frmProducts : Form
         chkActive.Checked = true;
         chkActive.SetBounds(90, 414, 120, 25);
 
+        var lblCategory = new Label { Text = "Danh mục:", Left = 410, Top = 350, AutoSize = true };
+        cboCategory.SetBounds(500, 346, 300, 25);
+        var lblImage = new Label { Text = "Link ảnh:", Left = 410, Top = 384, AutoSize = true };
+        txtImageUrl.SetBounds(500, 380, 300, 25);
+        var lblDesc = new Label { Text = "Mô tả:", Left = 410, Top = 418, AutoSize = true };
+        txtDescription.SetBounds(500, 414, 300, 66);
+
         // Nút
         void Setup(Button b, string text, int x, EventHandler onClick)
-        { b.Text = text; b.SetBounds(x, 457, 100, 32); b.Click += onClick; }
+        { b.Text = text; b.SetBounds(x, 497, 100, 32); b.Click += onClick; }
 
         Setup(btnNew,     "Thêm mới", 12,  btnNew_Click);
         Setup(btnSave,    "Lưu",      120, btnSave_Click);
@@ -82,12 +98,19 @@ public class frmProducts : Form
         btnBom.AutoSize = true;
         btnBom.Enabled = false;   // để Ngày 5
 
+        var searchBar = new Panel { Dock = DockStyle.Top, Height = txtSearch.PreferredHeight };
+        searchBar.Controls.Add(txtSearch);
+        searchBar.Controls.Add(cboFilter);
+        cboFilter.DisplayMember = nameof(CategoryDto.CategoryName);
+
         Controls.AddRange(new Control[]
         {
             dgvProducts, lblName, txtName, lblPrice, numPrice, chkActive,
-            btnNew, btnSave, btnDelete, btnRefresh, btnBom, txtSearch
+            lblCategory, cboCategory, lblImage, txtImageUrl, lblDesc, txtDescription,
+            btnNew, btnSave, btnDelete, btnRefresh, btnBom, searchBar
         });
         txtSearch.TextChanged += (_, _) => ApplyFilter();
+        cboFilter.SelectedIndexChanged += (_, _) => ApplyFilter();
     }
 
     
@@ -96,7 +119,13 @@ public class frmProducts : Form
         try
         {
             var list = await _api.GetAsync<List<ProductDto>>("/api/products");
+            var categories = await _api.GetAsync<List<CategoryDto>>("/api/categories") ?? [];
             _all = list ?? [];
+            _activeCategories = categories.Where(c => c.IsActive).OrderBy(c => c.CategoryName).ToList();
+            var filterId = (cboFilter.SelectedItem as CategoryDto)?.CategoryId;
+            cboFilter.DataSource = new[] { AllCategories }.Concat(categories.OrderBy(c => c.CategoryName)).ToList();
+            cboFilter.SelectedItem = categories.FirstOrDefault(c => c.CategoryId == filterId) ?? AllCategories;
+            SetCategoryChoices(null);
             ApplyFilter();
             if (_items.Count == 0) StartCreate();
         }
@@ -106,7 +135,9 @@ public class frmProducts : Form
     private void ApplyFilter()
     {
         _items.Clear();
-        foreach (var p in _all.Where(p => TextSearch.Matches(p.ProductName, txtSearch.Text)))
+        var categoryId = cboFilter.SelectedItem is CategoryDto c && c != AllCategories ? c.CategoryId : (Guid?)null;
+        foreach (var p in _all.Where(p => TextSearch.Matches(p.ProductName, txtSearch.Text)
+                                          && (categoryId is null || p.CategoryId == categoryId)))
             _items.Add(p);
     }
 
@@ -119,6 +150,25 @@ public class frmProducts : Form
         numPrice.Value = p.Price;
         chkActive.Checked = p.IsActive;
         btnDelete.Enabled = p.IsActive;
+        SetCategoryChoices(p);
+        txtImageUrl.Text = p.ImageUrl ?? "";
+        txtDescription.Text = p.Description ?? "";
+    }
+
+    // Combo = "(Không có)" + danh mục đang dùng; sản phẩm thuộc danh mục đã ngừng thì thêm riêng danh mục đó
+    // để bấm Lưu không gỡ sản phẩm khỏi danh mục (API chỉ chặn gán MỚI vào danh mục ngừng).
+    private void SetCategoryChoices(ProductDto? p)
+    {
+        var choices = new List<CategoryDto> { NoCategory };
+        choices.AddRange(_activeCategories);
+        var current = _activeCategories.FirstOrDefault(c => c.CategoryId == p?.CategoryId);
+        if (current is null && p?.CategoryId is Guid oldId)
+        {
+            current = new CategoryDto(oldId, $"{p.CategoryName} (ngừng)", false);
+            choices.Add(current);
+        }
+        cboCategory.DataSource = choices;
+        cboCategory.SelectedItem = current ?? NoCategory;
     }
 
     private void dgvProducts_CellFormatting(object? s, DataGridViewCellFormattingEventArgs e)
@@ -140,6 +190,9 @@ public class frmProducts : Form
         txtName.Clear();
         numPrice.Value = 0;
         chkActive.Checked = true;
+        SetCategoryChoices(null);
+        txtImageUrl.Clear();
+        txtDescription.Clear();
         btnDelete.Enabled = false;
         txtName.Focus();
     }
@@ -157,18 +210,21 @@ public class frmProducts : Form
         {
             var name = txtName.Text.Trim();
         var price = numPrice.Value;
+        var categoryId = cboCategory.SelectedItem is CategoryDto c && c != NoCategory ? c.CategoryId : (Guid?)null;
+        var description = string.IsNullOrWhiteSpace(txtDescription.Text) ? null : txtDescription.Text.Trim();
+        var imageUrl = string.IsNullOrWhiteSpace(txtImageUrl.Text) ? null : txtImageUrl.Text.Trim();
 
         if (_editingId is Guid productId)
         {
             await _api.PutAsync(
                 $"/api/products/{productId}",
-                new SaveProductRequest(name, price, chkActive.Checked));
+                new SaveProductRequest(name, price, chkActive.Checked, categoryId, description, imageUrl));
         }
         else
         {
             await _api.PostAsync<ProductDto>(
                 "/api/products",
-                new SaveProductRequest(name, price, true));
+                new SaveProductRequest(name, price, true, categoryId, description, imageUrl));
         }
             await LoadProductsAsync();
             StartCreate();
@@ -195,7 +251,10 @@ public class frmProducts : Form
         {
             await _api.PutAsync(
                 $"/api/products/{product.ProductId}",
-                new SaveProductRequest(product.ProductName, product.Price, false));
+                new SaveProductRequest(product.ProductName, product.Price, false,
+                    // giữ nguyên danh mục/mô tả/ảnh (API cho giữ danh mục cũ dù đã ngừng)
+                    product.CategoryId,
+                    product.Description, product.ImageUrl));
 
             await LoadProductsAsync();
         }

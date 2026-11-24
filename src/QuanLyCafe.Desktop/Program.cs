@@ -13,6 +13,7 @@ static class Program
     public static SessionStore Session { get; } = new();
     public static ApiClient Api { get; private set; } = null!;
     public const string BaseUrl = "http://localhost:8080/"; // API chạy trong Docker chỉ có HTTP
+    public const string WebBaseUrl = "http://localhost:5080"; // trang Web khách gọi món qua QR: {WebBaseUrl}/Ban/{tableId}
     [STAThread]
     static void Main()
     {

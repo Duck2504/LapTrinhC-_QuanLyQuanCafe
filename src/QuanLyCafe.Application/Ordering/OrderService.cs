@@ -20,7 +20,71 @@ public class OrderService(IOrderRepository orders, IInventoryService inventory, 
             .ToList();
     }
 
-    public async Task<OrderDto> CreateAsync(CreateOrderRequest req, Guid userId, CancellationToken ct = default)
+    // Web: khách quét QR tại bàn. Trả tên bàn và order đang mở (nếu có) để khách theo dõi món.
+    public async Task<GuestTableDto> GetGuestTableAsync(Guid tableId, CancellationToken ct = default)
+    {
+        var table = await orders.GetTableAsync(tableId, ct) ?? throw new NotFoundException("Không tìm thấy bàn.");
+        var open = await orders.GetOpenOrderIdsByTableAsync(ct);
+        return new(table.TableID, table.TableName, open.TryGetValue(tableId, out var orderId) ? await GetAsync(orderId, ct) : null);
+    }
+
+    public const int GuestMaxLines = 20, GuestMaxQuantity = 50;
+
+    // Web: khách gọi món tại bàn. Bàn trống → mở order mới (UserID NULL); bàn đang có order → thêm món vào order đó.
+    // Khách chỉ được thêm món, không sửa/xóa món cũ. Thêm xong gửi luôn xuống pha chế như nút "Gửi Bar" trên POS.
+    public async Task<OrderDto> GuestOrderAsync(Guid tableId, GuestOrderRequest req, CancellationToken ct = default)
+    {
+        var items = req.Items is { Count: > 0 and <= GuestMaxLines } list ? list
+            : throw new ValidationException(ErrorCodes.ValidationFailed, $"Chọn từ 1 đến {GuestMaxLines} món.");
+        if (items.Any(i => i.Quantity is <= 0 or > GuestMaxQuantity))
+            throw new ValidationException(ErrorCodes.ValidationFailed, $"Số lượng mỗi món từ 1 đến {GuestMaxQuantity}.");
+
+        var created = false;
+        if (!(await orders.GetOpenOrderIdsByTableAsync(ct)).TryGetValue(tableId, out var orderId))
+        {
+            orderId = (await CreateAsync(new CreateOrderRequest(OrderType.DineIn, tableId), null, ct)).Id;
+            created = true;
+        }
+
+        OrderDto dto;
+        BarTicketDto ticket;
+        try
+        {
+            (dto, ticket) = await orders.InOrderLockAsync(orderId, async () =>
+            {
+                var order = await GetOrderAsync(orderId, ct);
+                var keep = order.OrderDetails.Where(d => d.Status == OrderDetailStatus.Pending)
+                    .Select(d => new OrderItemRequest(d.ProductID, d.Quantity, d.Note, d.OrderDetailID));
+                var added = items.Select(i => i with { Id = null });
+                // UpdateItemsLocked đã kiểm kho trước khi lưu → báo Bar luôn, không kiểm kho lần hai như SubmitAsync.
+                var result = await UpdateItemsLockedAsync(orderId, new UpdateOrderItemsRequest(keep.Concat(added).ToList()), ct);
+                return (result, ToTicket(order));
+            }, ct);
+        }
+        catch when (created)
+        {
+            // Món không hợp lệ/thiếu nguyên liệu: không để lại order rỗng làm bàn hiện "Đang phục vụ".
+            // Trong khóa + đọc lại: khách khác cùng bàn có thể vừa thêm món vào order này.
+            // CancellationToken.None: khách đóng trang/timeout vẫn phải dọn xong.
+            await orders.InOrderLockAsync(orderId, async () =>
+            {
+                var order = await GetOrderAsync(orderId, CancellationToken.None);
+                if (order.Status == OrderStatus.Open && order.OrderDetails.Count == 0)
+                {
+                    order.Status = OrderStatus.Cancelled;
+                    order.Table!.Status = TableStatus.Empty;
+                    await orders.SaveChangesAsync(CancellationToken.None);
+                }
+                return 0;
+            }, CancellationToken.None);
+            throw;
+        }
+
+        await NotifyBarAsync(ticket);
+        return dto;
+    }
+
+    public async Task<OrderDto> CreateAsync(CreateOrderRequest req, Guid? userId, CancellationToken ct = default)
     {
         var order = new Order { OrderType = req.OrderType, UserID = userId };
         switch (req.OrderType)

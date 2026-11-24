@@ -22,6 +22,7 @@ QuanLyCafe là phần mềm quản lý quán cà phê gồm **ứng dụng Windo
 | 💵 **Thanh toán nhanh, không sai** | Tiền mặt (tự tính tiền thối), ví điện tử, thẻ. In hóa đơn có xem trước. Bấm thanh toán hai lần cũng không bị trừ kho hai lần. |
 | ⚠️ **Cảnh báo sắp hết hàng** | Nguyên liệu chạm mức tối thiểu là Quản lý nhận cảnh báo tức thì. Kiểm kê thiếu tự lập phiếu hao hụt. |
 | 📊 **Báo cáo có biểu đồ** | Doanh thu theo ngày / tháng / ca, món bán chạy, tồn kho — tính từ chính các hóa đơn đã thanh toán. |
+| 📱 **Web cho khách, gọi món qua QR** | Khách xem thực đơn theo danh mục, tìm món (gõ không dấu cũng được), xem chi tiết. Quét mã QR trên bàn để tự gọi món: quầy bar nhận phiếu ngay, khách theo dõi món *Chờ / Đang làm / Xong* trên điện thoại. |
 | 👥 **Phân quyền rõ ràng** | 4 vai trò **Quản lý · Thu ngân · Phục vụ · Pha chế**. Tài khoản nghỉ việc bị khóa là không vào được nữa. |
 
 ## 🧭 Một ca làm việc
@@ -49,7 +50,8 @@ sequenceDiagram
 | **Phục vụ** | Sơ đồ bàn + gọi món trên một màn hình · Gộp / tách bàn · Bấm *Đã giao* |
 | **Thu ngân** | Gọi món · Thanh toán · In hóa đơn |
 | **Pha chế** | Danh sách phiếu theo thứ tự order · *Đang làm* / *Xong* / *Hết nguyên liệu* |
-| **Quản lý** | Sản phẩm · Định lượng (BOM) · Kho (nhập / xuất / kiểm kê) · Nhân viên · Báo cáo · Thanh toán · Xem quầy pha chế |
+| **Quản lý** | Danh mục · Sản phẩm (ảnh, mô tả) · Định lượng (BOM) · Kho (nhập / xuất / kiểm kê) · Nhân viên · Báo cáo · Thanh toán · Xem quầy pha chế · In mã QR gọi món cho từng bàn |
+| **Khách (Web)** | Trang chủ · Thực đơn theo danh mục · Tìm món · Chi tiết món · Gọi món tại bàn qua QR — không cần tài khoản |
 
 ---
 
@@ -88,7 +90,7 @@ Mở file `.env`, **bắt buộc đổi** 3 giá trị: `SA_PASSWORD` (mật kh�
 docker compose up -d --build
 ```
 
-Đợi khoảng 1 phút, mở `http://localhost:8080/health` — thấy `{"status":"Healthy"}` là xong. Địa chỉ máy chủ của bạn: **`http://<IP-máy-chủ>:8080/`**.
+Đợi khoảng 1 phút, mở `http://localhost:8080/health` — thấy `{"status":"Healthy"}` là xong. Địa chỉ máy chủ của bạn: **`http://<IP-máy-chủ>:8080/`**. Trang Web cho khách chạy cùng lúc ở **`http://<IP-máy-chủ>:5080/`**.
 
 | Việc | Lệnh |
 |---|---|
@@ -111,6 +113,14 @@ dotnet run --project src/QuanLyCafe.Api --launch-profile https
 ```
 
 Máy chủ tự tạo bảng khi khởi động. Mở `https://localhost:7027/health` → `{"status":"Healthy"}`. Địa chỉ máy chủ của bạn: **`https://localhost:7027/`**.
+
+Trang Web cho khách (cửa sổ dòng lệnh thứ hai), trỏ vào máy chủ vừa chạy:
+
+```bash
+dotnet run --project src/QuanLyCafe.Web -- --Api:BaseUrl=https://localhost:7027/
+```
+
+Mở `http://localhost:5080`. Mã QR từng bàn lấy trong Desktop: Quản lý → **QR gọi món** (trỏ tới `http://localhost:5080/Ban/<mã bàn>`, đổi địa chỉ ở hằng `WebBaseUrl` trong `src/QuanLyCafe.Desktop/Program.cs`).
 
 > Dùng SQL Server Express? Đổi `Server=localhost` thành `Server=localhost\SQLEXPRESS`.
 
